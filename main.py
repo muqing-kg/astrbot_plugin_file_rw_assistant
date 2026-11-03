@@ -36,7 +36,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.7.1", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.7.2", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -500,7 +500,7 @@ class FileAssistant(Star):
             ("/upload", self._api_upload, ["POST"]),
         ]
         # 浏览器里缓存的旧页面仍在用旧插件名调接口，旧名一并注册，别让列表白白空着
-        prefixes = [PLUGIN_NAME]
+        prefixes = [PLUGIN_NAME, "astrbot_plugin_doc_hub", "astrbot_plugin_file_vault"]
         for prefix in prefixes:
             for route, handler, methods in routes:
                 try:
