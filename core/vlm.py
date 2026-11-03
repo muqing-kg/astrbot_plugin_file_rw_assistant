@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import base64
+import math
+import os
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -29,19 +32,35 @@ def _data_uri(data: bytes, mime: str = "image/png") -> str:
 
 
 class Vision:
-    def __init__(self, provider_getter: Callable[[], Awaitable[object]]):
+    def __init__(
+        self,
+        provider_getter: Callable[[], Awaitable[object]],
+        default_prompt: str = "",
+    ):
         self._get_provider = provider_getter
+        self.default_prompt = (default_prompt or "").strip()
 
-    async def describe(self, images: list[bytes]) -> str:
-        if not images:
+    async def describe(
+        self,
+        images: list[bytes],
+        *,
+        prompt: str = "",
+        audio: str = "",
+    ) -> str:
+        """images 是图片字节；audio 是音频 data URI。两者都为空的调用不该发生。"""
+        if not images and not audio:
             return ""
         provider = await self._get_provider()
         if provider is None:
             return "（未配置视觉模型，跳过识图）"
+        kwargs = {}
+        if audio:
+            kwargs["audio_urls"] = [audio]
         resp = await provider.text_chat(
-            prompt=PROMPT,
-            image_urls=[_data_uri(img) for img in images],
+            prompt=(prompt or self.default_prompt or PROMPT),
+            image_urls=[_data_uri(img) for img in images] or None,
             system_prompt="你是文档识图助手。",
+            **kwargs,
         )
         return (getattr(resp, "completion_text", "") or "").strip()
 
@@ -65,6 +84,15 @@ def duration_of(path: Path) -> float:
         return 0.0
 
 
+def frames_for(seconds: float, interval: float = 4, low: int = 4, high: int = 24) -> int:
+    """按时长算帧数：每 interval 秒一帧，夹在 [low, high]。"""
+    low = max(int(low), 1)
+    high = max(int(high), low)
+    if seconds <= 0 or interval <= 0:
+        return low
+    return max(low, min(high, math.ceil(seconds / interval)))
+
+
 def video_frames(path: Path, out_dir: Path, count: int = 8) -> list[bytes]:
     """按全长均匀抽帧，返回 JPEG 字节。失败返回空列表。"""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -86,3 +114,55 @@ def video_frames(path: Path, out_dir: Path, count: int = 8) -> list[bytes]:
         return []
     frames = sorted(out_dir.glob("f_*.jpg"))[:count]
     return [f.read_bytes() for f in frames]
+
+
+def extract_audio(path: Path, out_dir: Path, max_seconds: int = 300) -> str:
+    """抽第一条音轨转 mp3 data URI；没有音轨或失败返回空串。"""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / "audio.mp3"
+    out.unlink(missing_ok=True)
+    cmd = [
+        "ffmpeg", "-y", "-v", "error", "-t", str(max(int(max_seconds), 1)),
+        "-i", str(path), "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", str(out),
+    ]
+    try:
+        subprocess.run(cmd, check=True, timeout=300, capture_output=True)
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return ""
+    if not out.exists() or out.stat().st_size == 0:
+        return ""
+    return _data_uri(out.read_bytes(), "audio/mp3")
+
+
+def subtitle_text(path: Path, limit: int = 4000) -> str:
+    """抽内嵌字幕轨转纯文本；没有字幕轨返回空串。"""
+    probe = [
+        "ffprobe", "-v", "error", "-select_streams", "s",
+        "-show_entries", "stream=index", "-of", "csv=p=0", str(path),
+    ]
+    # ponytail: srt 复用器不支持写 stdout（会输出空文件），只能落到临时文件再读
+    fd, name = tempfile.mkstemp(suffix=".srt")
+    out = Path(name)
+    try:
+        os.close(fd)
+        if not (subprocess.run(probe, capture_output=True, text=True, timeout=30).stdout or "").strip():
+            return ""
+        done = subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-i", str(path), "-map", "0:s:0", "-f", "srt", str(out)],
+            capture_output=True, text=True, timeout=120,
+        )
+        if done.returncode != 0 or not out.exists():
+            return ""
+        text = out.read_text(encoding="utf-8", errors="replace")
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return ""
+    finally:
+        out.unlink(missing_ok=True)
+    lines = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        # srt 的序号行与时间轴行都不是台词
+        if not line or line.isdigit() or "-->" in line:
+            continue
+        lines.append(line)
+    return "\n".join(lines)[:limit]

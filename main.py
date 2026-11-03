@@ -17,7 +17,7 @@ from astrbot.api.web import request as web_request
 from .core import links, readers, writers
 from .core.sender import send_file
 from .core.store import KINDS, FileStore, human_size, kind_of
-from .core.vlm import Vision, video_frames
+from .core.vlm import Vision, duration_of, extract_audio, frames_for, subtitle_text
 
 PLUGIN_NAME = "astrbot_plugin_file_rw_assistant"
 REPO = "https://github.com/muqing-kg/astrbot_plugin_file_rw_assistant"
@@ -29,12 +29,14 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.2.3", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.3.0", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
-        self.vision = Vision(self._vision_provider)
+        self.vision = Vision(
+            self._vision_provider, str(self.config.get("vision_prompt") or "")
+        )
         self._cleaner: asyncio.Task | None = None
         self._register_web_api()
 
@@ -101,8 +103,11 @@ class FileAssistant(Star):
         if provider is None:
             return text
         try:
+            instruction = str(self.config.get("summary_prompt") or "").strip() or (
+                "把下面的文档正文压缩成不超过 800 字的要点，数字、名称、结论必须保留。"
+            )
             brief = await provider.text_chat(
-                prompt=f"把下面的文档正文压缩成不超过 800 字的要点，数字、名称、结论必须保留：\n\n{text[:60000]}",
+                prompt=f"{instruction}\n\n{text[:60000]}",
                 system_prompt="你是文档摘要器，只输出要点，不加评论，不寒暄。",
             )
             return f"【摘要】{brief}\n\n【原文开头】{text[:2000]}"
@@ -417,12 +422,29 @@ class FileAssistant(Star):
 
     # ── 内部工具方法 ─────────────────────────────────────────
     async def _describe_video(self, path: Path, title: str) -> str:
-        count = max(1, min(int(self.config.get("video_frames") or 8), 12))
-        frames = video_frames(path, self.store.temp_dir / "frames" / path.stem, count)
-        if not frames:
+        work = self.store.temp_dir / "frames" / path.stem
+        seconds = duration_of(path)
+        count = frames_for(
+            seconds,
+            interval=float(self.config.get("video_frame_interval") or 4),
+            low=int(self.config.get("video_min_frames") or 4),
+            high=int(self.config.get("video_max_frames") or 24),
+        )
+        frames = video_frames(path, work, count)
+        audio = ""
+        if self.config.get("video_audio", True):
+            audio = extract_audio(
+                path, work, int(self.config.get("video_audio_seconds") or 300)
+            )
+        if not frames and not audio:
             return "视频抽帧失败（ffmpeg 不可用或文件损坏）。"
-        desc = await self.vision.describe(frames)
-        return f"《{title}》按帧看内容（抽 {len(frames)} 帧）：\n{desc}"
+        desc = await self.vision.describe(
+            frames, prompt=str(self.config.get("video_prompt") or ""), audio=audio
+        )
+        heard = "＋原声" if audio else ""
+        body = f"《{title}》按 {len(frames)} 帧{heard}看内容（时长 {seconds:.0f} 秒）：\n{desc}"
+        subs = subtitle_text(path)
+        return f"{body}\n\n【视频字幕】\n{subs}" if subs else body
 
     def _resolve(self, key: str) -> dict[str, Any] | None:
         key = (key or "").strip()

@@ -3,6 +3,7 @@
 import asyncio
 import importlib.util
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -10,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core import readers, writers  # noqa: E402
+from core import readers, vlm, writers  # noqa: E402
 from core.store import FileStore, kind_of  # noqa: E402
 
 
@@ -132,6 +133,27 @@ class StoreTest(unittest.TestCase):
         csvf = self.root / "t.csv"
         csvf.write_text("a,b\n1,2\n", encoding="utf-8")
         assert "a | b" in asyncio.run(readers.read(csvf))
+
+    def test_frames_for_scales_with_duration(self):
+        """帧数按时长走：20 秒 → 5 帧；2 分钟顶到上限；超短视频保底。"""
+        assert vlm.frames_for(20, interval=4, low=4, high=24) == 5
+        assert vlm.frames_for(120, interval=4, low=4, high=24) == 24
+        assert vlm.frames_for(2, interval=4, low=4, high=24) == 4
+        assert vlm.frames_for(0, interval=4, low=4, high=24) == 4
+        assert vlm.frames_for(60, interval=0, low=4, high=24) == 4
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "no ffmpeg")
+    def test_extract_audio_and_subtitle(self):
+        """带音轨的 mp3 能抽出 data URI；无音轨时返回空串。"""
+        src = self.root / "tone.mp3"
+        subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+             "sine=frequency=440:duration=1", "-ac", "1", str(src)],
+            check=True, capture_output=True,
+        )
+        uri = vlm.extract_audio(src, self.root / "work", 10)
+        assert uri.startswith("data:audio/mp3;base64,"), uri[:40]
+        assert vlm.subtitle_text(src) == ""
 
 
 if __name__ == "__main__":

@@ -23,11 +23,53 @@
     "default": 2048,
     "hint": "视频体积大，单独设限"
   },
-  "video_frames": {
+  "video_frame_interval": {
+    "type": "float",
+    "description": "视频每隔几秒抽一帧",
+    "default": 4,
+    "hint": "帧数由时长自动算：时长除以该值，再夹在最小与最大帧数之间"
+  },
+  "video_min_frames": {
     "type": "int",
-    "description": "视频抽帧张数",
-    "default": 8,
-    "hint": "询问视频内容时抽取的帧数，越多越慢越贵"
+    "description": "视频最少抽几帧",
+    "default": 4,
+    "hint": "短视频也至少抽这么多帧"
+  },
+  "video_max_frames": {
+    "type": "int",
+    "description": "视频最多抽几帧",
+    "default": 24,
+    "hint": "长视频封顶帧数，越多越慢越贵"
+  },
+  "video_audio": {
+    "type": "bool",
+    "description": "把视频原声一起交给模型",
+    "default": true,
+    "hint": "需要模型能听音频；关闭后只看画面"
+  },
+  "video_audio_seconds": {
+    "type": "int",
+    "description": "原声最多送多少秒",
+    "default": 300,
+    "hint": "只送开头这段，避免长视频音频太占上下文"
+  },
+  "video_prompt": {
+    "type": "text",
+    "description": "视频理解提示词",
+    "default": "按顺序描述画面里发生的事，有人物就说在做什么；能听到声音就把说话内容、语气与环境声一并写出来；看到字幕或画面文字就照抄。不要寒暄，不要复述指令。",
+    "hint": "留空则使用这段默认文本"
+  },
+  "vision_prompt": {
+    "type": "text",
+    "description": "图片与文档内嵌图提示词",
+    "default": "逐张描述这些图片里能读到的内容。有文字就照抄关键文字与原意，是表格就还原成文字表格，是界面就说明在讲什么。不要寒暄，不要复述指令。",
+    "hint": "文档里抽出的插图、扫描件整页渲染都走这段提示词"
+  },
+  "summary_prompt": {
+    "type": "text",
+    "description": "长文档摘要提示词",
+    "default": "把下面的文档正文压缩成不超过 800 字的要点，数字、名称、结论必须保留。",
+    "hint": "正文超过 6000 字且配了文本模型时用它压缩"
   },
   "auto_cleanup": {
     "type": "bool",
