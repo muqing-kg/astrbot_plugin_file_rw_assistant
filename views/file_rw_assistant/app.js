@@ -192,16 +192,23 @@ async function load() {
   const params = new URLSearchParams();
   if (state.kind) params.set('kind', state.kind);
   if (state.q) params.set('q', state.q);
-  try {
-    const data = await api('/list?' + params.toString());
+  let data = null;
+  // 面板刚挂载时第一个请求会偶发 Failed to fetch（父窗口还没接稳），重试一次即可
+  for (let attempt = 0; attempt < 2 && !data; attempt += 1) {
+    try {
+      data = await api('/list?' + params.toString());
+      state.error = '';
+    } catch (err) {
+      const V = bridge();
+      state.error = `${err.message}（${V ? '桥已就绪' : '桥未注入'}）`;
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 300));
+    }
+  }
+  if (data) {
     state.counts = data.counts || {};
     state.labels = data.labels || {};
     // 只显示选中的类型；没选就空着，不替用户切到「有文件的类型」
     state.items = state.kind ? (data.items || []) : [];
-    state.error = '';
-  } catch (err) {
-    const V = bridge();
-    state.error = `${err.message}（${V ? '桥已就绪' : '桥未注入'}）`;
   }
   let total = 0;
   Object.values(state.counts).forEach((n) => { total += n; });
