@@ -145,8 +145,10 @@ async function load() {
       state.kind = firstNonEmpty(state.counts);
     }
   } catch (err) {
-    state.error = err.message;
-    toast(`列表加载失败：${err.message}`);
+    const V = bridge();
+    const why = V ? '桥已就绪' : '桥未注入';
+    state.error = `${err.message}（${why}）`;
+    toast(`列表加载失败：${err.message}（${why}）`);
   }
   let total = 0;
   Object.values(state.counts).forEach((n) => { total += n; });
@@ -311,4 +313,12 @@ card.addEventListener('drop', (e) => {
   uploadFiles(e.dataTransfer.files);
 });
 
-load();
+// 桥的 <script> 在 </body> 前，本文件先执行；直接 load() 会赶在桥出现前发请求。
+// 等桥 ready()（父窗口首帧上下文），最多等 1.5s，拿不到就按直连兜底。
+(async () => {
+  const V = bridge();
+  if (V && V.ready) {
+    await Promise.race([V.ready().catch(() => {}), new Promise((r) => setTimeout(r, 1500))]);
+  }
+  load();
+})();

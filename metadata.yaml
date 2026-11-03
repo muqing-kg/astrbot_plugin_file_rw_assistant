@@ -9,7 +9,7 @@ help: >-
   发回：按平台能力直发原文件，发送失败时提示文件已在库中，可在面板下载。
   面板：文件列表与类型筛选、正文预览与在线编辑、版本回滚、下载、发送到会话、删除、拖拽分片上传。
   限制：QQ 直发需 NapCat；.doc/.xls/.ppt 只能归档与下载；Office 只改已有内容，不新增行列形状；PDF 仅页面级操作；视频链接解析默认关闭。
-version: 1.4.7
+version: 1.4.8
 short_desc: 归档聊天中的文件与视频，可读、可改、可生成、可发回
 author: 沐倾
 repo: https://github.com/muqing-kg/astrbot_plugin_file_rw_assistant
