@@ -59,10 +59,6 @@ function human(n) {
   return `${i ? n.toFixed(1) : n}${u[i]}`;
 }
 
-function firstNonEmpty(counts) {
-  return KIND_ORDER.find((k) => (counts[k] || 0) > 0) || '';
-}
-
 function renderKinds() {
   const box = $('kinds');
   box.innerHTML = '';
@@ -92,7 +88,9 @@ function cell(tr, value, className) {
 function renderTable() {
   const body = $('table').querySelector('tbody');
   body.innerHTML = '';
-  $('empty').textContent = state.error ? `列表加载失败：${state.error}` : '这个分类里还没有文件';
+  $('empty').textContent = state.error
+    ? `列表加载失败：${state.error}`
+    : (state.kind ? '这个分类里还没有文件' : '左边先选一个类型');
   $('empty').hidden = state.items.length > 0;
   $('table').hidden = state.items.length === 0;
   state.items.forEach((it) => {
@@ -120,7 +118,7 @@ function renderTable() {
     open.type = 'button';
     open.className = 'link';
     open.textContent = '打开';
-    open.onclick = (e) => { e.stopPropagation(); openDrawer(it.id); };
+    open.onclick = (e) => { e.stopPropagation(); openDrawer(it); };
     const del = document.createElement('button');
     del.type = 'button';
     del.className = 'link link-danger';
@@ -128,7 +126,7 @@ function renderTable() {
     del.onclick = (e) => { e.stopPropagation(); deleteFile(it.id); };
     actTd.append(open, del);
     tr.appendChild(actTd);
-    tr.onclick = () => openDrawer(it.id);
+    tr.onclick = () => openDrawer(it);
     body.appendChild(tr);
   });
 }
@@ -139,16 +137,11 @@ async function load() {
   if (state.q) params.set('q', state.q);
   try {
     const data = await api('/list?' + params.toString());
-    state.items = data.items || [];
     state.counts = data.counts || {};
     state.labels = data.labels || {};
+    // 只显示选中的类型；没选就空着，不替用户切到「有文件的类型」
+    state.items = state.kind ? (data.items || []) : [];
     state.error = '';
-    if (data.all) {
-      toast(`「${state.labels[data.all] || data.all}」里还没有文件，先显示全部`);
-      state.kind = '';
-    } else if (!state.kind) {
-      state.kind = firstNonEmpty(state.counts);
-    }
   } catch (err) {
     const V = bridge();
     const why = V ? '桥已就绪' : '桥未注入';
@@ -157,46 +150,56 @@ async function load() {
   }
   let total = 0;
   Object.values(state.counts).forEach((n) => { total += n; });
-  $('stat').textContent = `${total} 个文件 · ${state.kind ? state.labels[state.kind] || state.kind : '全部'}`;
+  $('stat').textContent = `${total} 个文件 · ${state.kind ? state.labels[state.kind] || state.kind : '未选分类'}`;
   renderKinds();
   renderTable();
 }
 
-async function openDrawer(id) {
+// 先打开抽屉再取数据：请求失败也一定有可见反馈，不会点了没反应
+async function openDrawer(item) {
+  const it = typeof item === 'string' ? { id: item, name: item } : item;
+  if (!it || !it.id) return;
+  state.current = it;
+  $('drawer').hidden = false;
+  $('d-name').textContent = it.name || '';
+  $('d-meta').textContent = `${state.labels[it.kind] || it.kind || ''} · ${it.updated_at || ''}`;
+  $('d-content').value = '';
+  $('d-hint').textContent = '正在读取…';
+  $('d-versions').innerHTML = '';
   try {
-    const data = await api('/detail/' + encodeURIComponent(id));
+    const data = await api('/detail/' + encodeURIComponent(it.id));
     const f = data.file;
     if (!f) throw new Error('这个文件已经不在了，刷新一下');
     state.current = f;
-    $('drawer').hidden = false;
     $('d-name').textContent = f.name;
     $('d-meta').textContent = `${state.labels[f.kind] || f.kind} · ${human(f.size)} · v${f.current_version} · ${f.sender ? f.sender + ' · ' : ''}${f.session}`;
     const content = await api('/content/' + encodeURIComponent(f.id));
     const box = $('d-content');
     box.value = content.text || '';
     box.readOnly = !content.editable;
-  $('d-save').disabled = !content.editable;
-  $('d-hint').textContent = content.editable ? '改完点右边，存成新版本' : '这类文件不支持在线编辑';
-  const ul = $('d-versions');
-  ul.innerHTML = '';
-  (data.versions || []).forEach((v) => {
-    const li = document.createElement('li');
-    const info = document.createElement('span');
-    info.textContent = `v${v.version} · ${human(v.size)} · ${v.created_at}`;
-    const actions = document.createElement('span');
-    actions.className = 'v-actions';
-    const note = document.createElement('em');
-    note.textContent = v.note || '';
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'link';
-    btn.textContent = '回滚';
-    btn.onclick = () => rollback(f.id, v.version);
-    actions.append(note, btn);
-    li.append(info, actions);
-    ul.appendChild(li);
-  });
+    $('d-save').disabled = !content.editable;
+    $('d-hint').textContent = content.editable ? '改完点右边，存成新版本' : '这类文件不支持在线编辑';
+    const ul = $('d-versions');
+    ul.innerHTML = '';
+    (data.versions || []).forEach((v) => {
+      const li = document.createElement('li');
+      const info = document.createElement('span');
+      info.textContent = `v${v.version} · ${human(v.size)} · ${v.created_at}`;
+      const actions = document.createElement('span');
+      actions.className = 'v-actions';
+      const note = document.createElement('em');
+      note.textContent = v.note || '';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'link';
+      btn.textContent = '回滚';
+      btn.onclick = () => rollback(f.id, v.version);
+      actions.append(note, btn);
+      li.append(info, actions);
+      ul.appendChild(li);
+    });
   } catch (err) {
+    $('d-hint').textContent = `打开失败：${err.message}`;
     toast(`打开失败：${err.message}`);
   }
 }

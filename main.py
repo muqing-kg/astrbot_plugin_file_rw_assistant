@@ -36,7 +36,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.4.9", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.5.0", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -519,18 +519,12 @@ class FileAssistant(Star):
         keyword = (web_request.query.get("q") or "").strip()
         items = self.store.search(kind=kind or None, query=keyword)
         counts = self.store.counts()
-        fallback = ""
-        if kind and not items and any(counts.values()):
-            # 选中的类型是空的但库里明明有文件：退回全部，别让人以为文件丢了
-            items = self.store.search(query=keyword)
-            fallback = kind
         return json_response(
             {
                 "items": items,
                 "counts": counts,
                 "stats": self.store.stats(),
                 "labels": KIND_LABELS,
-                "all": fallback,
             }
         )
 
