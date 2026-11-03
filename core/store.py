@@ -6,11 +6,15 @@ import re
 import secrets
 import shutil
 import sqlite3
+import threading
 import time
 from contextlib import closing
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+# 同一文件可能被面板与模型同时改写，写操作串行化，避免版本号撞车导致内容错乱
+_LOCK = threading.Lock()
 
 KINDS: dict[str, tuple[str, ...]] = {
     "word": (".docx", ".doc"),
@@ -40,7 +44,6 @@ CREATE TABLE IF NOT EXISTS files (
     session TEXT NOT NULL,
     sender TEXT NOT NULL DEFAULT '',
     note TEXT NOT NULL DEFAULT '',
-    fingerprint TEXT NOT NULL DEFAULT '',
     current_version INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -152,6 +155,18 @@ class FileStore:
         sender: str = "",
         note: str = "",
     ) -> dict[str, Any]:
+        with _LOCK:
+            return self._add(name, session, data, src, sender, note)
+
+    def _add(
+        self,
+        name: str,
+        session: str,
+        data: bytes | None = None,
+        src: Path | None = None,
+        sender: str = "",
+        note: str = "",
+    ) -> dict[str, Any]:
         ext = Path(name).suffix.lower()
         kind = EXT_KIND.get(ext)
         if not kind:
@@ -175,6 +190,16 @@ class FileStore:
         return self.get(file_id)
 
     def add_version(
+        self,
+        file_id: str,
+        data: bytes | None = None,
+        src: Path | None = None,
+        note: str = "",
+    ) -> dict[str, Any]:
+        with _LOCK:
+            return self._add_version(file_id, data, src, note)
+
+    def _add_version(
         self,
         file_id: str,
         data: bytes | None = None,
@@ -320,6 +345,10 @@ class FileStore:
 
     # ── 删除与清理 ───────────────────────────────────────────
     def delete(self, file_id: str) -> bool:
+        with _LOCK:
+            return self._delete(file_id)
+
+    def _delete(self, file_id: str) -> bool:
         rec = self.get(file_id)
         if not rec:
             return False
@@ -349,7 +378,7 @@ class FileStore:
                 ]
             for fid in stale:
                 expired += int(self.delete(fid))
-        for entry in self.temp_dir.glob("*"):
+        for entry in self.temp_dir.rglob("*"):
             try:
                 if entry.is_file() and time.time() - entry.stat().st_mtime > 86400:
                     entry.unlink()

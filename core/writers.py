@@ -133,10 +133,13 @@ def build_office(name: str, content: str) -> bytes:
 
         data = load()
         slides = data.get("slides") if isinstance(data, dict) else [{"bullets": data}]
+        if not slides:
+            raise ValueError('内容需要 {"slides":[{"title":"…","bullets":["…"]}]}')
         prs = Presentation()
-        for spec in slides or []:
+        for spec in slides:
             slide = prs.slides.add_slide(prs.slide_layouts[1])  # 标题 + 内容
-            slide.shapes.title.text = str(spec.get("title") or "")
+            if slide.shapes.title is not None:
+                slide.shapes.title.text = str(spec.get("title") or "")
             bullets = [str(b) for b in (spec.get("bullets") or [])] or [""]
             frame = slide.placeholders[1].text_frame
             frame.text = bullets[0]

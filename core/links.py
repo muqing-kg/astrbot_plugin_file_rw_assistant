@@ -9,7 +9,10 @@ FORMAT = "bv*[height<=720]+ba/b[height<=720]/b"
 
 
 def fetch(url: str, out_dir: Path, cookies: str = "", max_mb: int = 2048) -> tuple[Path | None, str]:
-    """下载视频到 out_dir，返回 (路径, 标题或失败原因)。"""
+    """下载视频到 out_dir，返回 (路径, 标题或失败原因)。
+
+    cookies 可传 Netscape 格式原文，也可传本机文件路径。
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     cmd = [
         "yt-dlp", "--no-playlist", "--no-warnings", "-q",
@@ -20,7 +23,11 @@ def fetch(url: str, out_dir: Path, cookies: str = "", max_mb: int = 2048) -> tup
         url,
     ]
     if cookies:
-        cmd[1:1] = ["--cookies", cookies]
+        jar = Path(cookies)
+        if "\t" in cookies or "\n" in cookies:
+            jar = out_dir / "cookies.txt"
+            jar.write_text(cookies, encoding="utf-8")
+        cmd[1:1] = ["--cookies", str(jar)]
     try:
         done = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
     except FileNotFoundError:

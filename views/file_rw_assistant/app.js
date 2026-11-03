@@ -48,15 +48,27 @@ function renderTable() {
   $('empty').hidden = state.items.length > 0;
   state.items.forEach((it) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td title="${it.name}">${it.name}</td>
-      <td>${state.labels[it.kind] || it.kind}</td>
-      <td>${human(it.size)}</td>
-      <td>v${it.current_version}</td>
-      <td>${it.sender || it.session}</td>
-      <td>${it.updated_at}</td>
-      <td><button class="link">打开</button></td>`;
-    tr.querySelector('button').onclick = () => openDrawer(it.id);
+    const cells = [
+      it.name,
+      state.labels[it.kind] || it.kind,
+      human(it.size),
+      `v${it.current_version}`,
+      it.sender || it.session,
+      it.updated_at,
+    ];
+    cells.forEach((value, i) => {
+      const td = document.createElement('td');
+      td.textContent = value;
+      if (i === 0) td.title = it.name;
+      tr.appendChild(td);
+    });
+    const td = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.className = 'link';
+    btn.textContent = '打开';
+    btn.onclick = () => openDrawer(it.id);
+    td.appendChild(btn);
+    tr.appendChild(td);
     tr.onclick = (e) => { if (e.target.tagName !== 'BUTTON') openDrawer(it.id); };
     body.appendChild(tr);
   });
@@ -83,7 +95,6 @@ async function openDrawer(id) {
   const f = data.file;
   $('drawer').hidden = false;
   $('d-name').textContent = f.name;
-  $('d-download').href = `${API}/keyfile/${encodeURIComponent(f.id)}`;
   const content = await api('/content/' + encodeURIComponent(f.id));
   const box = $('d-content');
   box.value = content.text || '';
@@ -94,10 +105,18 @@ async function openDrawer(id) {
   ul.innerHTML = '';
   (data.versions || []).forEach((v) => {
     const li = document.createElement('li');
-    li.innerHTML = `<span>v${v.version} · ${human(v.size)} · ${v.created_at}</span>
-      <span class="v-actions"><em>${v.note || ''}</em>
-      <button class="link">回滚</button></span>`;
-    li.querySelector('button').onclick = () => rollback(f.id, v.version);
+    const info = document.createElement('span');
+    info.textContent = `v${v.version} · ${human(v.size)} · ${v.created_at}`;
+    const actions = document.createElement('span');
+    actions.className = 'v-actions';
+    const note = document.createElement('em');
+    note.textContent = v.note || '';
+    const btn = document.createElement('button');
+    btn.className = 'link';
+    btn.textContent = '回滚';
+    btn.onclick = () => rollback(f.id, v.version);
+    actions.append(note, btn);
+    li.append(info, actions);
     ul.appendChild(li);
   });
 }
@@ -139,6 +158,19 @@ $('d-close').onclick = () => { $('drawer').hidden = true; };
 $('d-save').onclick = saveContent;
 $('d-send').onclick = sendToSession;
 $('d-delete').onclick = removeFile;
+// 下载要走 fetch 才能带上面板 token，裸链接会被鉴权挡成 401
+$('d-download').onclick = async (e) => {
+  e.preventDefault();
+  if (!state.current) return;
+  const res = await fetch(`${API}/keyfile/${encodeURIComponent(state.current.id)}`, { headers: headers() });
+  if (!res.ok) { alert(`下载失败：${res.status}`); return; }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = state.current.name;
+  a.click();
+  URL.revokeObjectURL(url);
+};
 
 // 分片上传：8MB 一片，最后一片带 last=true 才入库
 const CHUNK = 8 * 1024 * 1024;

@@ -389,13 +389,12 @@ class FileAssistant(Star):
 
     # ── 内部工具方法 ─────────────────────────────────────────
     async def _describe_video(self, path: Path, title: str) -> str:
-        count = int(self.config.get("video_frames") or 8)
+        count = max(1, min(int(self.config.get("video_frames") or 8), 12))
         frames = video_frames(path, self.store.temp_dir / "frames" / path.stem, count)
         if not frames:
             return "视频抽帧失败（ffmpeg 不可用或文件损坏）。"
-        shots = frames[:6]
-        desc = await self.vision.describe(shots)
-        return f"《{title}》按帧看内容（抽 {len(frames)} 帧，取 {len(shots)} 帧）：\n{desc}"
+        desc = await self.vision.describe(frames)
+        return f"《{title}》按帧看内容（抽 {len(frames)} 帧）：\n{desc}"
 
     def _resolve(self, key: str) -> dict[str, Any] | None:
         key = (key or "").strip()
@@ -473,6 +472,11 @@ class FileAssistant(Star):
         if not rec:
             return json_response({"error": "not found"}, status_code=404)
         content = str(body.get("content") or "")
+        if not writers.is_textual(self._path_of(rec)):
+            return json_response(
+                {"error": "二进制文件不能在线编辑，请用 file_new 生成新版本"},
+                status_code=400,
+            )
         new = self.store.add_version(rec["id"], data=content.encode("utf-8"), note="面板编辑")
         return json_response({"ok": True, "file": new})
 
@@ -516,20 +520,23 @@ class FileAssistant(Star):
         body = await web_request.json(default={}) or {}
         name = str(body.get("name") or "")
         session = str(body.get("session") or "面板上传")
-        if body.get("upload_id"):
-            rec = self.store.upload_part(
-                str(body["upload_id"]),
-                _b64.b64decode(str(body.get("chunk_b64") or "")),
-                bool(body.get("last")),
-                name=name,
-                session=session,
-                note="面板上传",
-            )
-            if rec is None:
-                return json_response({"ok": True, "pending": True})
-        else:
-            raw = _b64.b64decode(str(body.get("content_b64") or ""))
-            rec = self.store.add(name=name, session=session, data=raw, note="面板上传")
+        try:
+            if body.get("upload_id"):
+                rec = self.store.upload_part(
+                    str(body["upload_id"]),
+                    _b64.b64decode(str(body.get("chunk_b64") or "")),
+                    bool(body.get("last")),
+                    name=name,
+                    session=session,
+                    note="面板上传",
+                )
+                if rec is None:
+                    return json_response({"ok": True, "pending": True})
+            else:
+                raw = _b64.b64decode(str(body.get("content_b64") or ""))
+                rec = self.store.add(name=name, session=session, data=raw, note="面板上传")
+        except Exception as exc:
+            return json_response({"error": f"上传失败：{exc}"}, status_code=400)
         return json_response({"ok": True, "file": rec})
 
 

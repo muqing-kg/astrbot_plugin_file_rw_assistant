@@ -182,6 +182,9 @@ def embedded_images(path: Path, limit: int) -> list[bytes]:
                 ]
                 for name in sorted(names):
                     if Path(name).suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                        info = zf.getinfo(name)
+                        if info.file_size > 8 * 1024 * 1024:  # 单张超 8MB 不送模型
+                            continue
                         shots.append(zf.read(name))
                         if len(shots) >= limit:
                             break

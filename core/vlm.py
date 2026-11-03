@@ -74,7 +74,7 @@ def video_frames(path: Path, out_dir: Path, count: int = 8) -> list[bytes]:
     count = max(count, 1)
     seconds = duration_of(path)
     # 时长撑不起 count 帧时退化成每秒一帧，否则按全长均分
-    fps = f"{count}/{seconds:.2f}" if seconds > count else "1"
+    fps = f"{count / seconds:.4f}" if seconds > count else "1"
     cmd = [
         "ffmpeg", "-v", "error", "-i", str(path),
         "-vf", f"fps={fps},scale=1024:-2", "-frames:v", str(count),
