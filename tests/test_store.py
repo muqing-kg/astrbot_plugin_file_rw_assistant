@@ -4,6 +4,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import asyncio
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -59,13 +60,20 @@ class StoreTest(unittest.TestCase):
         assert self.store.counts()["excel"] == 1
         assert self.store.search(query="说明")[0]["name"] == "说明.txt"
 
+    def test_upload_part_chunks(self):
+        assert self.store.upload_part("u1", b"ab", False, name="q.txt", session="s") is None
+        rec = self.store.upload_part("u1", b"cd", True, name="q.txt", session="s")
+        assert rec["size"] == 4
+        assert Path(rec["path"]).read_bytes() == b"abcd"
+        assert not list(self.store.temp_dir.glob("up_*.part"))  # 临时片已清
+
     def test_readers_text_and_csv(self):
         txt = self.root / "x.txt"
         txt.write_text("你好\n世界", encoding="utf-8")
-        assert "你好" in readers.read(txt)
+        assert "你好" in asyncio.run(readers.read(txt))
         csvf = self.root / "t.csv"
         csvf.write_text("a,b\n1,2\n", encoding="utf-8")
-        assert "a | b" in readers.read(csvf)
+        assert "a | b" in asyncio.run(readers.read(csvf))
 
 
 if __name__ == "__main__":

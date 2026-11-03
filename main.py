@@ -1,4 +1,4 @@
-"""文件仓：聊天文件归档、版本历史、模型读写与面板管理。"""
+"""文枢：聊天文件归档、版本历史、读写解析、改写生成与面板管理。"""
 
 from __future__ import annotations
 
@@ -13,12 +13,13 @@ from astrbot.api.star import Context, Star, register
 from astrbot.api.web import file_response, json_response
 from astrbot.api.web import request as web_request
 
-from .core import readers, writers
+from .core import links, readers, writers
 from .core.sender import send_file
 from .core.store import KINDS, FileStore, human_size, kind_of
 from .core.vlm import Vision, video_frames
 
-PLUGIN_NAME = "astrbot_plugin_file_vault"
+PLUGIN_NAME = "astrbot_plugin_doc_hub"
+REPO = "https://github.com/muqing-kg/astrbot_plugin_doc_hub"
 KIND_LABELS = {
     "word": "Word", "excel": "Excel", "ppt": "PPT", "pdf": "PDF",
     "text": "文本", "markdown": "Markdown", "code": "代码", "csv": "CSV",
@@ -27,8 +28,8 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件仓", "1.0.0", "https://github.com/anhui/astrbot_plugin_file_vault")
-class FileVault(Star):
+@register(PLUGIN_NAME, "沐倾", "文枢", "1.1.0", REPO)
+class DocHub(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
@@ -62,12 +63,12 @@ class FileVault(Star):
         self.store
         if self.config.get("auto_cleanup", True):
             self._cleaner = asyncio.create_task(self._cleanup_loop())
-        logger.info(f"[文件仓] 已就绪，存储于 {self._root()}")
+        logger.info(f"[文枢] 已就绪，存储于 {self._root()}")
 
     async def terminate(self) -> None:
         if self._cleaner:
             self._cleaner.cancel()
-        logger.info("[文件仓] 已卸载")
+        logger.info("[文枢] 已卸载")
 
     async def _cleanup_loop(self) -> None:
         while True:
@@ -75,11 +76,11 @@ class FileVault(Star):
                 await asyncio.sleep(6 * 3600)
                 result = self.store.purge()
                 if result["expired"] or result["temp"]:
-                    logger.info(f"[文件仓] 清理完成：{result}")
+                    logger.info(f"[文枢] 清理完成：{result}")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.warning(f"[文件仓] 清理失败：{exc}")
+                logger.warning(f"[文枢] 清理失败：{exc}")
 
     # ── 模型选择 ─────────────────────────────────────────────
     async def _provider_by(self, key: str):
@@ -91,7 +92,7 @@ class FileVault(Star):
                     return provider
             return await self.context.get_using_provider_async()
         except Exception as exc:
-            logger.warning(f"[文件仓] 取模型失败（{key}）：{exc}")
+            logger.warning(f"[文枢] 取模型失败（{key}）：{exc}")
             return None
 
     async def _vision_provider(self):
@@ -136,16 +137,16 @@ class FileVault(Star):
             except Exception as exc:
                 notes.append(f"{name}：{exc}")
         if notes:
-            marker = "\n[文件仓] " + "；".join(notes)
+            marker = "\n[文枢] " + "；".join(notes)
             try:
                 event.message_str = (event.message_str or "") + marker
             except Exception:
-                logger.info(f"[文件仓] 入库：{'; '.join(notes)}")
+                logger.info(f"[文枢] 入库：{'; '.join(notes)}")
 
-    # ── 工具：列 / 读 / 写 / 发 ───────────────────────────────
+    # ── 工具：列 / 读 / 写 / 发 / PDF / 视频链接 ─────────────
     @filter.llm_tool(name="file_list")
     async def file_list(self, event: AstrMessageEvent, kind: str = "", keyword: str = ""):
-        """列出文件仓里的文件。用户问「有哪些文件」时调用。
+        """列出文枢里的文件。用户问「有哪些文件」时调用。
 
         Args:
             kind(string): 类型，可选 word/excel/ppt/pdf/text/markdown/code/csv/video，留空表示全部
@@ -154,13 +155,13 @@ class FileVault(Star):
         kind = (kind or "").strip().lower()
         items = self.store.search(kind=kind or None, query=keyword or "")
         if not items:
-            return "文件仓里没有符合条件的文件。"
+            return "文枢里没有符合条件的文件。"
         lines = [
             f"{i['name']} | id={i['id']} | {KIND_LABELS.get(i['kind'], i['kind'])} | "
             f"{human_size(i['size'])} | v{i['current_version']} | {i['updated_at']}"
             for i in items[:40]
         ]
-        return "文件仓（最多显示 40 条）：\n" + "\n".join(lines)
+        return "文枢（最多显示 40 条）：\n" + "\n".join(lines)
 
     @filter.llm_tool(name="file_read")
     async def file_read(self, event: AstrMessageEvent, file_id: str, version: int = 0):
@@ -177,12 +178,8 @@ class FileVault(Star):
         if not path.exists():
             return f"文件不存在：{path.name}"
         if rec["kind"] == "video":
-            frames = video_frames(path, self.store.temp_dir / rec["id"], int(self.config.get("video_frames") or 8))
-            if not frames:
-                return "视频抽帧失败（ffmpeg 不可用或文件损坏）。"
-            desc = await self.vision.describe(frames[: int(self.config.get("max_vision_images") or 6)])
-            return f"《{rec['name']}》按帧看内容：\n{desc}"
-        text = readers.read(
+            return await self._describe_video(path, rec["name"])
+        text = await readers.read(
             path,
             ocr=bool(self.config.get("enable_pdf_ocr", True)),
             vision=self.vision,
@@ -204,6 +201,8 @@ class FileVault(Star):
         path = self._path_of(rec)
         if rec["kind"] == "video":
             return "视频不支持改写。"
+        if rec["kind"] == "pdf":
+            return "PDF 用 file_pdf 处理：keep 只留指定页，rebuild 按全文重排新版本。"
         try:
             if writers.is_textual(path) and content:
                 new = self.store.add_version(rec["id"], data=content.encode("utf-8"), note="模型改写")
@@ -215,15 +214,13 @@ class FileVault(Star):
                 result = writers.edit_office(path, parsed)
                 new = self.store.add_version(rec["id"], data=path.read_bytes(), note="模型就地改写")
                 return f"{result}；已存成第 {new['current_version']} 版"
-            if rec["kind"] == "pdf":
-                return "PDF 只支持页面级操作（另存页子集），正文改写会破坏版式。"
             return "没有给内容或 ops，什么都没改。"
         except Exception as exc:
             return f"改写失败（{type(exc).__name__}: {exc}）"
 
     @filter.llm_tool(name="file_new")
     async def file_new(self, event: AstrMessageEvent, name: str, content: str):
-        """生成一个新文件并存进文件仓。用户要你写代码、写文档、生成报告时调用。
+        """生成一个新文件并存进文枢。用户要你写代码、写文档、生成报告时调用。
 
         Args:
             name(string): 文件名，必须带扩展名，如 周报.md、script.py、data.csv
@@ -243,7 +240,7 @@ class FileVault(Star):
 
     @filter.llm_tool(name="file_send")
     async def file_send(self, event: AstrMessageEvent, file_id: str, version: int = 0):
-        """把文件仓里的文件发到当前聊天。用户说「发给我」「传过来」时调用。
+        """把文枢里的文件发到当前聊天。用户说「发给我」「传过来」时调用。
 
         Args:
             file_id(string): 文件 id 或文件名关键词
@@ -259,7 +256,101 @@ class FileVault(Star):
             path = target
         return await send_file(event, path, rec["name"])
 
+    @filter.llm_tool(name="file_pdf")
+    async def file_pdf(
+        self,
+        event: AstrMessageEvent,
+        file_id: str,
+        action: str = "pages",
+        pages: str = "",
+        content: str = "",
+    ):
+        """处理 PDF。keep=只保留指定页并存成新版本；pages=把页渲染成图看版式与扫描件；rebuild=按全文重排新版本（版式会变）。
+
+        Args:
+            file_id(string): 文件 id 或文件名关键词
+            action(string): keep / pages / rebuild
+            pages(string): keep 用，如 "1-3,5"
+            content(string): rebuild 用的全文，留空则沿用当前 PDF 已提取的文字
+        """
+        rec = self._resolve(file_id)
+        if not rec or rec["kind"] != "pdf":
+            return f"没找到 PDF：{file_id}"
+        path = self._path_of(rec)
+        action = (action or "pages").strip().lower()
+        try:
+            if action == "keep":
+                wanted = _parse_pages(pages)
+                if not wanted:
+                    return "页码格式不对，示例：1-3,5"
+                out = self.store.temp_dir / f"{rec['id']}_keep.pdf"
+                msg = writers.pdf_keep_pages(path, out, wanted)
+                new = self.store.add_version(rec["id"], data=out.read_bytes(), note="保留指定页")
+                out.unlink(missing_ok=True)
+                return f"{msg}；已存成第 {new['current_version']} 版"
+            if action == "rebuild":
+                text = content or await readers.read(path, ocr=False, limit=200000)
+                out = self.store.temp_dir / f"{rec['id']}_rebuild.pdf"
+                msg = writers.pdf_from_text(out, text, Path(rec["name"]).stem)
+                new = self.store.add_version(rec["id"], data=out.read_bytes(), note="全文重排")
+                out.unlink(missing_ok=True)
+                return f"{msg}；版式已变化，已存成第 {new['current_version']} 版"
+            shots = readers.pdf_page_images(path, 6)
+            if not shots:
+                return "按页渲染失败（缺 pypdfium2 或 PDF 损坏）。"
+            desc = await self.vision.describe(shots)
+            return f"《{rec['name']}》前 {len(shots)} 页看图结果：\n{desc}"
+        except Exception as exc:
+            return f"处理失败（{type(exc).__name__}: {exc}）"
+
+    @filter.llm_tool(name="file_video_link")
+    async def file_video_link(self, event: AstrMessageEvent, url: str, keep: bool = False):
+        """用户发来视频链接（B站/YouTube 等）问讲了什么时调用：临时下载、抽帧看懂，看完默认删掉。
+
+        Args:
+            url(string): 视频链接
+            keep(bool): true 表示顺便存进文枢，false 表示看完就删
+        """
+        if not self.config.get("video_link_enabled", True):
+            return "视频链接解析已关闭。"
+        if not url.lower().startswith(("http://", "https://")):
+            return "这不是一个链接。"
+        path, title = links.fetch(
+            url,
+            self.store.temp_dir / "links",
+            cookies=str(self.config.get("video_link_cookies") or ""),
+            max_mb=int(self.config.get("max_video_mb") or 2048),
+        )
+        if not path:
+            return f"视频下载失败：{title}"
+        try:
+            desc = await self._describe_video(path, title or "视频")
+            if not keep:
+                return desc
+            rec = self.store.add(
+                name=f"{title or 'video'}{path.suffix}",
+                session=event.unified_msg_origin,
+                src=path,
+                sender=event.get_sender_name() or "",
+                note="视频链接",
+            )
+            return f"{desc}\n已存进文枢：{rec['name']}（id={rec['id']}）"
+        finally:
+            if keep and self.config.get("video_link_auto_delete", True):
+                path.unlink(missing_ok=True)
+            elif not keep:
+                path.unlink(missing_ok=True)
+
     # ── 内部工具方法 ─────────────────────────────────────────
+    async def _describe_video(self, path: Path, title: str) -> str:
+        count = int(self.config.get("video_frames") or 8)
+        frames = video_frames(path, self.store.temp_dir / "frames" / path.stem, count)
+        if not frames:
+            return "视频抽帧失败（ffmpeg 不可用或文件损坏）。"
+        shots = frames[: int(self.config.get("max_vision_images") or 6)]
+        desc = await self.vision.describe(shots)
+        return f"《{title}》按帧看内容（抽 {len(frames)} 帧，取 {len(shots)} 帧）：\n{desc}"
+
     def _resolve(self, key: str) -> dict[str, Any] | None:
         key = (key or "").strip()
         if not key:
@@ -294,10 +385,10 @@ class FileVault(Star):
         for route, handler, methods in routes:
             try:
                 self.context.register_web_api(
-                    f"/{PLUGIN_NAME}{route}", handler, methods, f"文件仓 {route}"
+                    f"/{PLUGIN_NAME}{route}", handler, methods, f"文枢 {route}"
                 )
             except Exception as exc:
-                logger.warning(f"[文件仓] 注册接口 {route} 失败：{exc}")
+                logger.warning(f"[文枢] 注册接口 {route} 失败：{exc}")
 
     async def _api_list(self, **_: Any):
         kind = (web_request.query.get("kind") or "").strip()
@@ -322,10 +413,7 @@ class FileVault(Star):
         if not rec:
             return json_response({"error": "not found"}, status_code=404)
         path = self._path_of(rec)
-        if writers.is_textual(path):
-            text = readers.read(path, limit=200000)
-        else:
-            text = readers.read(path, ocr=False)
+        text = await readers.read(path, ocr=False, limit=200000)
         return json_response({"text": text, "editable": writers.is_textual(path)})
 
     async def _api_keyfile(self, file_id: str = "", **_):
@@ -377,14 +465,26 @@ class FileVault(Star):
             return json_response({"error": str(exc)}, status_code=500)
 
     async def _api_upload(self, **_):
-        body = await web_request.json(default={}) or {}
-        name = str(body.get("name") or "")
+        """一次性 base64 上传，或 upload_id + chunk_b64 分片续传（最后一片带 last=true）。"""
         import base64 as _b64
 
-        raw = _b64.b64decode(str(body.get("content_b64") or ""))
-        rec = self.store.add(
-            name=name, session=str(body.get("session") or "面板上传"), data=raw, note="面板上传"
-        )
+        body = await web_request.json(default={}) or {}
+        name = str(body.get("name") or "")
+        session = str(body.get("session") or "面板上传")
+        if body.get("upload_id"):
+            rec = self.store.upload_part(
+                str(body["upload_id"]),
+                _b64.b64decode(str(body.get("chunk_b64") or "")),
+                bool(body.get("last")),
+                name=name,
+                session=session,
+                note="面板上传",
+            )
+            if rec is None:
+                return json_response({"ok": True, "pending": True})
+        else:
+            raw = _b64.b64decode(str(body.get("content_b64") or ""))
+            rec = self.store.add(name=name, session=session, data=raw, note="面板上传")
         return json_response({"ok": True, "file": rec})
 
     async def _api_config(self, **_):
@@ -399,3 +499,18 @@ class FileVault(Star):
                 self._store.max_versions = int(self.config.get("max_versions") or 20)
             return json_response({"ok": True, "config": dict(self.config)})
         return json_response({"config": dict(self.config), "labels": KIND_LABELS})
+
+
+def _parse_pages(text: str) -> list[int]:
+    out: list[int] = []
+    for part in (text or "").replace("，", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            lo, _, hi = part.partition("-")
+            if lo.strip().isdigit() and hi.strip().isdigit():
+                out.extend(range(int(lo), int(hi) + 1))
+        elif part.isdigit():
+            out.append(int(part))
+    return out

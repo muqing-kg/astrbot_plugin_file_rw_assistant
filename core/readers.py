@@ -94,6 +94,26 @@ def _pdf(path: Path) -> str:
     return "\n".join(out)
 
 
+def pdf_page_images(path: Path, limit: int = 6, dpi: int = 140) -> list[bytes]:
+    """整页渲染成 PNG，交给视觉模型看版式与扫描件。缺库返回空列表。"""
+    try:
+        import pypdfium2 as pdfium
+    except ImportError:
+        return []
+    shots: list[bytes] = []
+    try:
+        doc = pdfium.PdfDocument(str(path))
+        for i in range(min(len(doc), max(limit, 1))):
+            pil = doc[i].render(scale=dpi / 72).to_pil()
+            buf = io.BytesIO()
+            pil.save(buf, format="PNG")
+            shots.append(buf.getvalue())
+        doc.close()
+    except Exception:
+        return shots
+    return shots
+
+
 def embedded_images(path: Path, limit: int) -> list[bytes]:
     """Office/PDF 里夹带的图片，供视觉模型认字识图。"""
     suffix = path.suffix.lower()
@@ -126,8 +146,10 @@ def embedded_images(path: Path, limit: int) -> list[bytes]:
     return shots
 
 
-def read(path: Path, *, ocr: bool = False, vision=None, limit: int = MAX_CHARS) -> str:
-    """返回文本摘要。ocr=True 且纯文字提取为空时，交给 vision 读图。"""
+async def read(
+    path: Path, *, ocr: bool = False, vision=None, limit: int = MAX_CHARS
+) -> str:
+    """返回文本摘要。ocr=True 且 PDF 没有文字层时，整页渲染交给视觉模型。"""
     suffix = path.suffix.lower()
     try:
         if suffix in (".csv", ".tsv"):
@@ -145,7 +167,10 @@ def read(path: Path, *, ocr: bool = False, vision=None, limit: int = MAX_CHARS) 
         if suffix == ".pdf":
             text = _pdf(path)
             if ocr and len(text) < 50 and vision is not None:
-                return _clip("（PDF 无文字层，按图识别）\n" + vision.describe_files(path), limit)
+                shots = pdf_page_images(path, 6)
+                if not shots:
+                    return _clip("（PDF 无文字层，服务器缺 pypdfium2，无法按页识图）\n" + text, limit)
+                return _clip("（PDF 无文字层，按页渲染识图）\n" + await vision.describe(shots), limit)
             return _clip(text, limit)
         if suffix in (".doc", ".xls", ".ppt"):
             return "旧版 Office 格式（.doc/.xls/.ppt）不支持直接解析，请转成新版格式。"

@@ -1,11 +1,11 @@
 {
   "metadata": {
-    "display_name": "文件仓",
-    "desc": "群聊/私聊文件自动入库，带版本历史、模型读写与改后发回，面板里可直接管理"
+    "display_name": "文枢",
+    "desc": "聊天文件自动归档，可读可改可生成可发回，带版本历史与面板管理"
   },
   "views": {
-    "file_vault": {
-      "title": "文件仓"
+    "doc_hub": {
+      "title": "文枢"
     }
   }
 }

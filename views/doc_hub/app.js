@@ -1,4 +1,4 @@
-const API = '/api/plug/astrbot_plugin_file_vault';
+const API = '/api/plug/astrbot_plugin_doc_hub';
 const KIND_ORDER = ['word', 'excel', 'ppt', 'pdf', 'text', 'markdown', 'code', 'csv', 'video'];
 const state = { kind: '', q: '', items: [], counts: {}, labels: {}, current: null };
 
@@ -177,5 +177,58 @@ $('d-save').onclick = saveContent;
 $('d-send').onclick = sendToSession;
 $('d-delete').onclick = removeFile;
 $('s-save').onclick = saveSettings;
+
+// 分片上传：8MB 一片，最后一片带 last=true 才入库
+const CHUNK = 8 * 1024 * 1024;
+
+function toB64(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(s);
+}
+
+async function uploadFile(file) {
+  const uploadId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const total = Math.max(1, Math.ceil(file.size / CHUNK));
+  for (let i = 0; i < total; i += 1) {
+    $('up-hint').textContent = `上传 ${file.name} ${i + 1}/${total}`;
+    const buf = await file.slice(i * CHUNK, (i + 1) * CHUNK).arrayBuffer();
+    await api('/upload', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: file.name,
+        upload_id: uploadId,
+        chunk_b64: toB64(buf),
+        last: i === total - 1,
+      }),
+    });
+  }
+  $('up-hint').textContent = `${file.name} 已入库`;
+  await load();
+}
+
+async function uploadFiles(list) {
+  for (const file of Array.from(list || [])) {
+    try {
+      await uploadFile(file);
+    } catch (err) {
+      $('up-hint').textContent = `${file.name} 失败：${err.message}`;
+    }
+  }
+}
+
+$('pick').onclick = () => $('file').click();
+$('file').onchange = (e) => uploadFiles(e.target.files);
+const dropzone = document.querySelector('.tablewrap');
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drop'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drop'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('drop');
+  uploadFiles(e.dataTransfer.files);
+});
 
 load();

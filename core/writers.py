@@ -93,3 +93,35 @@ def copy_for(path: Path, target: Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(path, target)
     return target
+
+
+def pdf_from_text(dst: Path, text: str, title: str = "") -> str:
+    """把全文重排成新 PDF。原版式、字体、图片一律不保留。"""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.pdfgen import canvas
+
+    pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    width, height = A4
+    margin, leading, per_line = 56, 18, 44  # ponytail: 按字符数折行，够中文用；要精确版式得上 HTML→PDF
+    c = canvas.Canvas(str(dst), pagesize=A4)
+    y = height - margin
+    c.setFont("STSong-Light", 11)
+    if title:
+        c.setFont("STSong-Light", 14)
+        c.drawString(margin, y, title[:60])
+        y -= leading * 1.6
+        c.setFont("STSong-Light", 11)
+    for raw in (text or "").splitlines():
+        line = raw.rstrip()
+        for start in range(0, max(len(line), 1), per_line):
+            if y < margin:
+                c.showPage()
+                c.setFont("STSong-Light", 11)
+                y = height - margin
+            c.drawString(margin, y, line[start:start + per_line])
+            y -= leading
+    c.save()
+    return f"已重排成新 PDF：{dst.name}"

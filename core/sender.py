@@ -27,5 +27,5 @@ async def send_file(event, path: Path, name: str | None = None) -> str:
         # ponytail: 平台不发文件就只回提示；要真·跨平台直发再按平台写适配
         return (
             f"当前平台直发文件失败（{type(exc).__name__}: {exc}），"
-            f"文件已在文件仓：{name or path.name}"
+            f"文件已在文枢：{name or path.name}"
         )

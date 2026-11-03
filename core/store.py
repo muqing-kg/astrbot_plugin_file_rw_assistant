@@ -1,4 +1,4 @@
-"""文件仓落盘与索引。SQLite 只存元数据，文件本体按会话归档。"""
+"""文枢落盘与索引。SQLite 只存元数据，文件本体按会话归档。"""
 
 from __future__ import annotations
 
@@ -119,6 +119,30 @@ class FileStore:
         return target.stat().st_size
 
     # ── 写入 ─────────────────────────────────────────────────
+    def upload_part(
+        self,
+        upload_id: str,
+        chunk: bytes,
+        last: bool,
+        *,
+        name: str,
+        session: str,
+        sender: str = "",
+        note: str = "",
+    ) -> dict[str, Any] | None:
+        """面板分片上传：逐片追加，最后一片才入库。"""
+        part = self.temp_dir / f"up_{_safe(upload_id)}.part"
+        with part.open("ab") as fh:
+            fh.write(chunk)
+        if not last:
+            return None
+        try:
+            return self.add(
+                name=name, session=session, src=part, sender=sender, note=note
+            )
+        finally:
+            part.unlink(missing_ok=True)
+
     def add(
         self,
         name: str,

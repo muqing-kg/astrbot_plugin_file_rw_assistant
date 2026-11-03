@@ -137,3 +137,5 @@ td:first-child { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
 .field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
 .field span { color: var(--dim); }
 .field input[type="checkbox"] { width: auto; align-self: flex-start; }
+
+.tablewrap.drop { outline: 2px dashed var(--accent); outline-offset: -6px; }

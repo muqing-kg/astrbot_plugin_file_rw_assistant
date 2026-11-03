@@ -52,19 +52,37 @@ class Vision:
         return await self.describe(shots)
 
 
+def duration_of(path: Path) -> float:
+    """秒数，取不到当 0。"""
+    cmd = [
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=nw=1:nk=1", str(path),
+    ]
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return float((done.stdout or "0").strip() or 0)
+    except (subprocess.SubprocessError, FileNotFoundError, OSError, ValueError):
+        return 0.0
+
+
 def video_frames(path: Path, out_dir: Path, count: int = 8) -> list[bytes]:
-    """ffmpeg 均匀抽帧，返回 JPEG 字节。失败返回空列表。"""
+    """按全长均匀抽帧，返回 JPEG 字节。失败返回空列表。"""
     out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("f_*.jpg"):
+        old.unlink(missing_ok=True)
     pattern = out_dir / "f_%03d.jpg"
+    count = max(count, 1)
+    seconds = duration_of(path)
+    # 时长撑不起 count 帧时退化成每秒一帧，否则按全长均分
+    fps = f"{count}/{seconds:.2f}" if seconds > count else "1"
     cmd = [
         "ffmpeg", "-v", "error", "-i", str(path),
-        "-vf", f"fps=1/2,scale=1024:-2", "-frames:v", str(max(count, 1)),
+        "-vf", f"fps={fps},scale=1024:-2", "-frames:v", str(count),
         str(pattern),
     ]
     try:
-        subprocess.run(cmd, check=True, timeout=120, capture_output=True)
+        subprocess.run(cmd, check=True, timeout=300, capture_output=True)
     except (subprocess.SubprocessError, FileNotFoundError, OSError):
-        # ponytail: 只试一次 fps=1/2；长视频想要均匀分布再按 duration 计算，别现在加
         return []
     frames = sorted(out_dir.glob("f_*.jpg"))[:count]
     return [f.read_bytes() for f in frames]

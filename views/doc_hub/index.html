@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>文件仓</title>
+  <title>文枢</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -21,6 +21,9 @@
       <div class="row-tools">
         <input id="q" type="search" placeholder="搜文件名" />
         <button class="ghost" id="refresh">刷新</button>
+        <button class="btn primary" id="pick">上传</button>
+        <input id="file" type="file" hidden />
+        <span class="hint" id="up-hint"></span>
       </div>
       <div class="tablehost">
         <table id="table">
