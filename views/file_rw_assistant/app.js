@@ -18,6 +18,10 @@ async function api(path, opt = {}) {
   return res.json();
 }
 
+function toast(text) {
+  $('up-hint').textContent = text;
+}
+
 function human(n) {
   const u = ['B', 'KB', 'MB', 'GB'];
   let i = 0;
@@ -29,47 +33,66 @@ function firstNonEmpty(counts) {
   return KIND_ORDER.find((k) => (counts[k] || 0) > 0) || '';
 }
 
-function renderRail() {
-  const rail = $('rail');
-  rail.innerHTML = '';
+function renderKinds() {
+  const box = $('kinds');
+  box.innerHTML = '';
   KIND_ORDER.forEach((kind) => {
     const n = state.counts[kind] || 0;
     const b = document.createElement('button');
-    b.className = `rail-item${state.kind === kind ? ' active' : ''}${n ? '' : ' dim'}`;
-    b.innerHTML = `<span>${state.labels[kind] || kind}</span><em>${n}</em>`;
-    b.onclick = () => { state.kind = kind; renderRail(); load(); };
-    rail.appendChild(b);
+    b.type = 'button';
+    b.className = `kind${state.kind === kind ? ' active' : ''}${n ? '' : ' dim'}`;
+    const label = document.createElement('span');
+    label.textContent = state.labels[kind] || kind;
+    const count = document.createElement('em');
+    count.textContent = n;
+    b.append(label, count);
+    b.onclick = () => { state.kind = kind; renderKinds(); load(); };
+    box.appendChild(b);
   });
+}
+
+function cell(tr, value, className) {
+  const td = document.createElement('td');
+  if (className) td.className = className;
+  td.textContent = value;
+  tr.appendChild(td);
+  return td;
 }
 
 function renderTable() {
   const body = $('table').querySelector('tbody');
   body.innerHTML = '';
   $('empty').hidden = state.items.length > 0;
+  $('table').hidden = state.items.length === 0;
   state.items.forEach((it) => {
     const tr = document.createElement('tr');
-    const cells = [
-      it.name,
-      state.labels[it.kind] || it.kind,
-      human(it.size),
-      `v${it.current_version}`,
-      it.sender || it.session,
-      it.updated_at,
-    ];
-    cells.forEach((value, i) => {
-      const td = document.createElement('td');
-      td.textContent = value;
-      if (i === 0) td.title = it.name;
-      tr.appendChild(td);
-    });
-    const td = document.createElement('td');
-    const btn = document.createElement('button');
-    btn.className = 'link';
-    btn.textContent = '打开';
-    btn.onclick = () => openDrawer(it.id);
-    td.appendChild(btn);
-    tr.appendChild(td);
-    tr.onclick = (e) => { if (e.target.tagName !== 'BUTTON') openDrawer(it.id); };
+    const nameTd = document.createElement('td');
+    const box = document.createElement('div');
+    box.className = 'cell-name';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = it.name;
+    name.title = it.name;
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = it.sender ? `${it.sender} · ${it.session}` : it.session;
+    box.append(name, meta);
+    nameTd.appendChild(box);
+    tr.appendChild(nameTd);
+    cell(tr, state.labels[it.kind] || it.kind);
+    cell(tr, human(it.size));
+    cell(tr, `v${it.current_version}`);
+    cell(tr, it.updated_at);
+    const actTd = document.createElement('td');
+    actTd.className = 'actions-col';
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'link';
+    open.textContent = '打开';
+    open.onclick = (e) => { e.stopPropagation(); openDrawer(it.id); };
+    actTd.appendChild(open);
+    tr.appendChild(actTd);
+    tr.onclick = () => openDrawer(it.id);
     body.appendChild(tr);
   });
 }
@@ -78,29 +101,35 @@ async function load() {
   const params = new URLSearchParams();
   if (state.kind) params.set('kind', state.kind);
   if (state.q) params.set('q', state.q);
-  const data = await api('/list?' + params.toString());
-  state.items = data.items || [];
-  state.counts = data.counts || {};
-  state.labels = data.labels || {};
-  if (!state.kind) state.kind = firstNonEmpty(state.counts);
-  const s = data.stats || { files: 0, bytes: 0 };
-  $('stat').textContent = `${s.files} 个文件 · ${human(s.bytes || 0)}`;
-  renderRail();
+  try {
+    const data = await api('/list?' + params.toString());
+    state.items = data.items || [];
+    state.counts = data.counts || {};
+    state.labels = data.labels || {};
+    if (!state.kind) state.kind = firstNonEmpty(state.counts);
+  } catch (err) {
+    toast(`列表加载失败：${err.message}`);
+  }
+  let total = 0;
+  Object.values(state.counts).forEach((n) => { total += n; });
+  $('stat').textContent = `${total} 个文件 · ${state.kind ? state.labels[state.kind] || state.kind : '全部'}`;
+  renderKinds();
   renderTable();
 }
 
 async function openDrawer(id) {
   const data = await api('/detail/' + encodeURIComponent(id));
-  state.current = data.file;
   const f = data.file;
+  state.current = f;
   $('drawer').hidden = false;
   $('d-name').textContent = f.name;
+  $('d-meta').textContent = `${state.labels[f.kind] || f.kind} · ${human(f.size)} · v${f.current_version} · ${f.sender ? f.sender + ' · ' : ''}${f.session}`;
   const content = await api('/content/' + encodeURIComponent(f.id));
   const box = $('d-content');
   box.value = content.text || '';
   box.readOnly = !content.editable;
   $('d-save').disabled = !content.editable;
-  $('d-hint').textContent = content.editable ? '可直接改，存为新版本' : '这类文件不支持在线编辑';
+  $('d-hint').textContent = content.editable ? '改完点右边，存成新版本' : '这类文件不支持在线编辑';
   const ul = $('d-versions');
   ul.innerHTML = '';
   (data.versions || []).forEach((v) => {
@@ -112,6 +141,7 @@ async function openDrawer(id) {
     const note = document.createElement('em');
     note.textContent = v.note || '';
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'link';
     btn.textContent = '回滚';
     btn.onclick = () => rollback(f.id, v.version);
@@ -122,34 +152,54 @@ async function openDrawer(id) {
 }
 
 async function rollback(fileId, version) {
-  await api('/rollback', { method: 'POST', body: JSON.stringify({ file_id: fileId, version }) });
-  await load();
-  await openDrawer(fileId);
+  try {
+    await api('/rollback', { method: 'POST', body: JSON.stringify({ file_id: fileId, version }) });
+    await load();
+    await openDrawer(fileId);
+  } catch (err) {
+    toast(`回滚失败：${err.message}`);
+  }
 }
 
 async function saveContent() {
   if (!state.current) return;
-  await api('/save', {
-    method: 'POST',
-    body: JSON.stringify({ file_id: state.current.id, content: $('d-content').value }),
-  });
-  await load();
-  await openDrawer(state.current.id);
+  try {
+    await api('/save', {
+      method: 'POST',
+      body: JSON.stringify({ file_id: state.current.id, content: $('d-content').value }),
+    });
+    await load();
+    await openDrawer(state.current.id);
+    toast('已存为新版本');
+  } catch (err) {
+    toast(`保存失败：${err.message}`);
+  }
 }
 
 async function sendToSession() {
   if (!state.current) return;
   const umo = prompt('发到哪个会话？填 UMO，如 QQ-唐小珂:GroupMessage:652135583');
   if (!umo) return;
-  const r = await api('/send', { method: 'POST', body: JSON.stringify({ file_id: state.current.id, umo }) });
-  alert(r.ok ? '已发送' : '发送失败');
+  try {
+    const r = await api('/send', { method: 'POST', body: JSON.stringify({ file_id: state.current.id, umo }) });
+    toast(r.ok ? '已发送' : '发送失败');
+  } catch (err) {
+    toast(`发送失败：${err.message}`);
+  }
 }
 
 async function removeFile() {
-  if (!state.current || !confirm(`删除 ${state.current.name}？该文件所有版本都会消失。`)) return;
-  await api('/delete', { method: 'POST', body: JSON.stringify({ file_id: state.current.id }) });
-  $('drawer').hidden = true;
-  await load();
+  if (!state.current) return;
+  const id = state.current.id;
+  try {
+    await api('/delete', { method: 'POST', body: JSON.stringify({ file_id: id }) });
+    $('drawer').hidden = true;
+    state.current = null;
+    await load();
+    toast('已删除');
+  } catch (err) {
+    toast(`删除失败：${err.message}`);
+  }
 }
 
 $('q').oninput = (e) => { state.q = e.target.value.trim(); clearTimeout(window._t); window._t = setTimeout(load, 250); };
@@ -159,11 +209,10 @@ $('d-save').onclick = saveContent;
 $('d-send').onclick = sendToSession;
 $('d-delete').onclick = removeFile;
 // 下载要走 fetch 才能带上面板 token，裸链接会被鉴权挡成 401
-$('d-download').onclick = async (e) => {
-  e.preventDefault();
+$('d-download').onclick = async () => {
   if (!state.current) return;
   const res = await fetch(`${API}/keyfile/${encodeURIComponent(state.current.id)}`, { headers: headers() });
-  if (!res.ok) { alert(`下载失败：${res.status}`); return; }
+  if (!res.ok) { toast(`下载失败：${res.status}`); return; }
   const url = URL.createObjectURL(await res.blob());
   const a = document.createElement('a');
   a.href = url;
@@ -188,7 +237,7 @@ async function uploadFile(file) {
   const uploadId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
   const total = Math.max(1, Math.ceil(file.size / CHUNK));
   for (let i = 0; i < total; i += 1) {
-    $('up-hint').textContent = `上传 ${file.name} ${i + 1}/${total}`;
+    toast(`上传 ${file.name} ${i + 1}/${total}`);
     const buf = await file.slice(i * CHUNK, (i + 1) * CHUNK).arrayBuffer();
     await api('/upload', {
       method: 'POST',
@@ -200,7 +249,7 @@ async function uploadFile(file) {
       }),
     });
   }
-  $('up-hint').textContent = `${file.name} 已入库`;
+  toast(`${file.name} 已入库`);
   await load();
 }
 
@@ -209,19 +258,19 @@ async function uploadFiles(list) {
     try {
       await uploadFile(file);
     } catch (err) {
-      $('up-hint').textContent = `${file.name} 失败：${err.message}`;
+      toast(`${file.name} 失败：${err.message}`);
     }
   }
 }
 
 $('pick').onclick = () => $('file').click();
 $('file').onchange = (e) => uploadFiles(e.target.files);
-const dropzone = document.querySelector('.tablewrap');
-dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drop'); });
-dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drop'));
-dropzone.addEventListener('drop', (e) => {
+const card = $('card');
+card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drop'); });
+card.addEventListener('dragleave', () => card.classList.remove('drop'));
+card.addEventListener('drop', (e) => {
   e.preventDefault();
-  dropzone.classList.remove('drop');
+  card.classList.remove('drop');
   uploadFiles(e.dataTransfer.files);
 });
 

@@ -34,10 +34,18 @@
     "description": "启用到期自动清理",
     "default": true
   },
+  "text_model_provider_id": {
+    "type": "string",
+    "description": "文本模型",
+    "default": "",
+    "_special": "select_provider",
+    "hint": "留空 = 跟随框架当前模型；用于把长文档正文压缩成摘要"
+  },
   "vision_model_provider_id": {
     "type": "string",
     "description": "视觉模型",
     "default": "",
+    "_special": "select_provider",
     "hint": "留空 = 跟随框架当前模型；用于 PDF 内嵌图、Office 插图、视频抽帧"
   },
   "enable_pdf_ocr": {

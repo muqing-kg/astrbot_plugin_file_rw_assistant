@@ -4,49 +4,64 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>文件读写小助手</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="stat" id="stat"></div>
-  </header>
-
-  <main class="view" id="view-files">
-    <aside class="rail" id="rail"></aside>
-    <section class="tablewrap">
-      <div class="row-tools">
-        <input id="q" type="search" placeholder="搜文件名" />
-        <button class="ghost" id="refresh">刷新</button>
-        <button class="btn primary" id="pick">上传</button>
-        <input id="file" type="file" hidden />
-        <span class="hint" id="up-hint"></span>
+  <main class="page">
+    <header class="page-head">
+      <div>
+        <h1>文件读写小助手</h1>
+        <p class="sub">聊天里的文件自动存到这里，可读、可改、可生成、可发回；每个文件都有版本历史。</p>
       </div>
-      <div class="tablehost">
-        <table id="table">
-          <thead>
-            <tr><th>名称</th><th>类型</th><th>大小</th><th>版本</th><th>来源</th><th>更新时间</th><th></th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <p class="empty" id="empty" hidden>这个类型下还没有文件。</p>
+      <div class="head-actions">
+        <span class="chip" id="stat">—</span>
+        <button class="ghost" id="refresh" type="button">刷新</button>
+        <button id="pick" type="button">上传</button>
+        <input id="file" type="file" multiple hidden />
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="搜文件名或备注" />
+      <span class="hint" id="up-hint"></span>
+    </div>
+
+    <div class="kinds" id="kinds"></div>
+
+    <section class="card" id="card">
+      <table class="files" id="table">
+        <thead>
+          <tr>
+            <th>名称</th><th>类型</th><th>大小</th><th>版本</th><th>更新时间</th><th class="actions-col"></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty" id="empty" hidden>
+        <p class="empty-title">这一类里还没有文件</p>
+        <p class="empty-hint">在聊天里发一份文件，或者点右上角上传、直接把文件拖到这个框里。</p>
       </div>
     </section>
+
     <aside class="drawer" id="drawer" hidden>
       <div class="drawer-head">
-        <strong id="d-name"></strong>
-        <button class="ghost" id="d-close">关闭</button>
+        <div>
+          <strong id="d-name"></strong>
+          <p class="hint" id="d-meta"></p>
+        </div>
+        <button class="ghost" id="d-close" type="button">关闭</button>
       </div>
       <div class="drawer-actions">
-        <a class="btn" id="d-download" href="#" download>下载</a>
-        <button class="btn" id="d-send">发到会话</button>
-        <button class="btn danger" id="d-delete">删除</button>
+        <button class="ghost" id="d-download" type="button">下载</button>
+        <button class="ghost" id="d-send" type="button">发到会话</button>
+        <button class="link-danger" id="d-delete" type="button">删除</button>
       </div>
       <section class="pane">
         <h4>内容</h4>
         <textarea id="d-content" spellcheck="false"></textarea>
         <div class="pane-foot">
           <span class="hint" id="d-hint"></span>
-          <button class="btn primary" id="d-save" disabled>存为新版本</button>
+          <button id="d-save" type="button" disabled>存为新版本</button>
         </div>
       </section>
       <section class="pane">
@@ -55,7 +70,6 @@
       </section>
     </aside>
   </main>
-
-  <script src="app.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>

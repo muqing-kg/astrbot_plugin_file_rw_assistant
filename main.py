@@ -28,7 +28,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.2.0", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.2.1", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -93,6 +93,21 @@ class FileAssistant(Star):
 
     async def _vision_provider(self):
         return await self._provider_by("vision_model_provider_id")
+
+    async def _condense(self, text: str, provider_id: str) -> str:
+        """长正文先过一遍配置的文本模型，免得整篇灌进对话上下文。"""
+        provider = self.context.get_provider_by_id(provider_id)
+        if provider is None:
+            return text
+        try:
+            brief = await provider.text_chat(
+                prompt=f"把下面的文档正文压缩成不超过 800 字的要点，数字、名称、结论必须保留：\n\n{text[:60000]}",
+                system_prompt="你是文档摘要器，只输出要点，不加评论，不寒暄。",
+            )
+            return f"【摘要】{brief}\n\n【原文开头】{text[:2000]}"
+        except Exception as exc:
+            logger.warning(f"[文件读写小助手] 摘要失败：{exc}")
+            return text
 
     # ── 入库 ─────────────────────────────────────────────────
     def _limit_mb(self, kind: str) -> int:
@@ -210,6 +225,9 @@ class FileAssistant(Star):
             lines=lines or "",
             find=find or "",
         )
+        pid = str(self.config.get("text_model_provider_id") or "").strip()
+        if pid and len(text) > 6000:
+            text = await self._condense(text, pid)
         return f"《{rec['name']}》第 {version or rec['current_version']} 版内容：\n{text}"
 
     @filter.llm_tool(name="file_write")
