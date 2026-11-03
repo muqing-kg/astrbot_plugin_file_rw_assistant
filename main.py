@@ -10,6 +10,8 @@ from typing import Any
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import File as FileComp
+from astrbot.api.message_components import Reply as ReplyComp
+from astrbot.api.message_components import Video as VideoComp
 from astrbot.api.star import Context, Star, register
 from astrbot.api.web import file_response, json_response
 from astrbot.api.web import request as web_request
@@ -36,7 +38,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.7.2", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.7.3", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -148,17 +150,22 @@ class FileAssistant(Star):
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=100)
     async def on_file_message(self, event: AstrMessageEvent):
-        """聊天里出现文件就入库，并把入库结果告诉模型。"""
-        comps = [c for c in event.message_obj.message if isinstance(c, FileComp)]
+        """聊天里出现文件或视频就入库，并把入库结果告诉模型。"""
+        comps = self._media_components(event.message_obj.message)
         if not comps:
             return
         session = event.unified_msg_origin
         sender = event.get_sender_name() or event.get_sender_id() or ""
         notes = []
         for comp in comps:
-            name = comp.name or "file"
+            name = getattr(comp, "name", "") or ""
             try:
-                path = Path(await comp.get_file())
+                if isinstance(comp, VideoComp):
+                    path = Path(await comp.convert_to_file_path())
+                    name = name or path.name
+                else:
+                    name = name or "file"
+                    path = Path(await comp.get_file())
                 if not path.exists():
                     notes.append(f"{name}：下载失败")
                     continue
@@ -168,7 +175,7 @@ class FileAssistant(Star):
                     f"类型={KIND_LABELS.get(rec['kind'], rec['kind'])}）"
                 )
             except Exception as exc:
-                notes.append(f"{name}：{exc}")
+                notes.append(f"{name or '视频'}：{exc}")
         if notes:
             marker = (
                 "\n[文件读写小助手] " + "；".join(notes)
@@ -178,6 +185,17 @@ class FileAssistant(Star):
                 event.message_str = (event.message_str or "") + marker
             except Exception:
                 logger.info(f"[文件读写小助手] 入库：{'; '.join(notes)}")
+
+    @staticmethod
+    def _media_components(chain: list) -> list:
+        """取出文件和视频组件；引用消息里的内容也翻出来。"""
+        out: list = []
+        for comp in chain or []:
+            if isinstance(comp, (FileComp, VideoComp)):
+                out.append(comp)
+            elif isinstance(comp, ReplyComp):
+                out.extend(FileAssistant._media_components(getattr(comp, "chain", None) or []))
+        return out
 
     # ── 工具：列 / 读 / 写 / 发 / PDF / 视频链接 ─────────────
     @filter.llm_tool(name="file_list")
