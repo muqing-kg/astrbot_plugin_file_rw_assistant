@@ -34,12 +34,6 @@
     "description": "启用到期自动清理",
     "default": true
   },
-  "text_model_provider_id": {
-    "type": "string",
-    "description": "文本模型",
-    "default": "",
-    "hint": "留空 = 跟随框架当前模型"
-  },
   "vision_model_provider_id": {
     "type": "string",
     "description": "视觉模型",

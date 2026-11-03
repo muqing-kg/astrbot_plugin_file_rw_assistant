@@ -85,6 +85,8 @@ def _pptx(path: Path) -> str:
 def _parse_range(text: str, total: int) -> tuple[int, int]:
     """把 "30" / "30-32" 解析成 1 起的闭区间，越界自动夹紧。"""
     text = (text or "").replace("，", "-").replace("~", "-").strip()
+    if not text:
+        return 1, max(total, 1)
     lo, _, hi = text.partition("-")
     try:
         start = int(lo) if lo.strip() else 1

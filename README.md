@@ -55,7 +55,6 @@ AstrBot 插件：自动归档聊天中的文件，并向模型提供文件读取
 | `max_video_mb` | int | `2048` | 单个视频大小上限（MB） |
 | `video_frames` | int | `8` | 视频抽帧数量 |
 | `auto_cleanup` | bool | `true` | 是否启用定时清理（每 6 小时一次） |
-| `text_model_provider_id` | string | 空 | 文本处理使用的模型；留空跟随当前会话模型 |
 | `vision_model_provider_id` | string | 空 | 图像与视频识别使用的模型；留空跟随当前会话模型 |
 | `enable_pdf_ocr` | bool | `true` | PDF 无文字层时启用整页渲染识别 |
 | `video_link_enabled` | bool | `false` | 是否允许解析视频链接；默认关闭，需要时打开 |
