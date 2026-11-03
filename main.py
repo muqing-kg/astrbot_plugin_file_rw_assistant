@@ -29,7 +29,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.2.2", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.2.3", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -149,7 +149,10 @@ class FileAssistant(Star):
             except Exception as exc:
                 notes.append(f"{name}：{exc}")
         if notes:
-            marker = "\n[文件读写小助手] " + "；".join(notes)
+            marker = (
+                "\n[文件读写小助手] " + "；".join(notes)
+                + "（要看内容、总结、改写或发回，直接调 file_read / file_write，file_id 传上面的 id）"
+            )
             try:
                 event.message_str = (event.message_str or "") + marker
             except Exception:
