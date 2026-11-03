@@ -12,6 +12,7 @@ function headers() {
 async function api(path, opt = {}) {
   const res = await fetch(API + path, {
     ...opt,
+    credentials: 'same-origin',
     headers: { ...headers(), ...(opt.body ? { 'Content-Type': 'application/json' } : {}), ...(opt.headers || {}) },
   });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -216,7 +217,7 @@ $('d-delete').onclick = removeFile;
 // 下载要走 fetch 才能带上面板 token，裸链接会被鉴权挡成 401
 $('d-download').onclick = async () => {
   if (!state.current) return;
-  const res = await fetch(`${API}/keyfile/${encodeURIComponent(state.current.id)}`, { headers: headers() });
+  const res = await fetch(`${API}/keyfile/${encodeURIComponent(state.current.id)}`, { headers: headers(), credentials: 'same-origin' });
   if (!res.ok) { toast(`下载失败：${res.status}`); return; }
   const url = URL.createObjectURL(await res.blob());
   const a = document.createElement('a');
