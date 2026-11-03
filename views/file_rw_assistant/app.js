@@ -74,7 +74,8 @@ async function openViewer(it, version) {
     const q = new URLSearchParams({ file_id: it.id });
     if (version) q.set('version', String(version));
     const d = await api(`/file?${q}`);
-    $('v-meta').textContent = `${d.file ? d.file.kind : ''} · v${d.version}${d.editable ? '' : ' · 二进制文件不显示正文，可下载查看'}`;
+    const kindName = state.labels[d.file && d.file.kind] || (d.file && d.file.kind) || '';
+    $('v-meta').textContent = `${kindName} · v${d.version}${d.editable ? '' : ' · 二进制文件不显示正文，可下载查看'}`;
     $('v-text').value = d.text || '';
     $('v-text').readOnly = true;
     const sel = $('v-version');
@@ -95,6 +96,10 @@ async function deleteFile(id) {
   if (!id) return;
   try {
     await api('/delete', { method: 'POST', body: JSON.stringify({ file_id: id }) });
+    if (viewing && viewing.id === id) {
+      $('viewer').hidden = true;
+      viewing = null;
+    }
     await load();
     toast('已删除');
   } catch (err) {

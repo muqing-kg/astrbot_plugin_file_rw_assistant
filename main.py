@@ -36,7 +36,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.7.0", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.7.1", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -494,19 +494,13 @@ class FileAssistant(Star):
     def _register_web_api(self) -> None:
         routes = [
             ("/list", self._api_list, ["GET"]),
-            ("/detail/{file_id}", self._api_detail, ["GET"]),
-            ("/content/{file_id}", self._api_content, ["GET"]),
-            ("/keyfile/{file_id}", self._api_keyfile, ["GET"]),
-            ("/download", self._api_download, ["GET"]),
             ("/file", self._api_file, ["GET"]),
-            ("/save", self._api_save, ["POST"]),
+            ("/download", self._api_download, ["GET"]),
             ("/delete", self._api_delete, ["POST"]),
-            ("/rollback", self._api_rollback, ["POST"]),
-            ("/send", self._api_send, ["POST"]),
             ("/upload", self._api_upload, ["POST"]),
         ]
         # 浏览器里缓存的旧页面仍在用旧插件名调接口，旧名一并注册，别让列表白白空着
-        prefixes = [PLUGIN_NAME, "astrbot_plugin_doc_hub", "astrbot_plugin_file_vault"]
+        prefixes = [PLUGIN_NAME]
         for prefix in prefixes:
             for route, handler, methods in routes:
                 try:
@@ -529,23 +523,6 @@ class FileAssistant(Star):
                 "labels": KIND_LABELS,
             }
         )
-
-    async def _api_detail(self, file_id: str = "", **_):
-        rec = self.store.get(file_id)
-        if not rec:
-            return json_response({"error": "not found"}, status_code=404)
-        return json_response({"file": rec, "versions": self.store.versions(file_id)})
-
-    async def _api_content(self, file_id: str = "", **_):
-        rec = self.store.get(file_id)
-        if not rec:
-            return json_response({"error": "not found"}, status_code=404)
-        path = self._path_of(rec)
-        text = await readers.read(path, ocr=False, limit=200000)
-        return json_response({"text": text, "editable": writers.is_textual(path)})
-
-    async def _api_keyfile(self, file_id: str = "", **_):
-        return self._file_response(file_id, web_request.query.get("version"))
 
     async def _api_download(self, **_):
         # 查询参数版下载：桥的 download 带 params 最稳，不依赖路径参数
@@ -590,52 +567,10 @@ class FileAssistant(Star):
             ver = int(raw)
         return file_response(self._path_of(rec, ver), filename=rec["name"])
 
-    async def _api_save(self, **_):
-        body = await web_request.json(default={}) or {}
-        rec = self.store.get(str(body.get("file_id") or ""))
-        if not rec:
-            return json_response({"error": "not found"}, status_code=404)
-        content = str(body.get("content") or "")
-        if not writers.is_textual(self._path_of(rec)):
-            return json_response(
-                {"error": "二进制文件不能在线编辑，请用 file_new 生成新版本"},
-                status_code=400,
-            )
-        new = self.store.add_version(rec["id"], data=content.encode("utf-8"), note="面板编辑")
-        return json_response({"ok": True, "file": new})
-
     async def _api_delete(self, **_):
         body = await web_request.json(default={}) or {}
         ok = self.store.delete(str(body.get("file_id") or ""))
         return json_response({"ok": ok})
-
-    async def _api_rollback(self, **_):
-        body = await web_request.json(default={}) or {}
-        fid = str(body.get("file_id") or "")
-        ver = int(body.get("version") or 0)
-        rec = self.store.get(fid)
-        if not rec or not ver:
-            return json_response({"error": "bad request"}, status_code=400)
-        src = self._path_of(rec, ver)
-        if not src.exists():
-            return json_response({"error": "版本文件丢失"}, status_code=404)
-        new = self.store.add_version(fid, data=src.read_bytes(), note=f"回滚自 v{ver}")
-        return json_response({"ok": True, "file": new})
-
-    async def _api_send(self, **_):
-        body = await web_request.json(default={}) or {}
-        rec = self.store.get(str(body.get("file_id") or ""))
-        umo = str(body.get("umo") or "").strip()
-        if not rec or not umo:
-            return json_response({"error": "需要 file_id 与 umo"}, status_code=400)
-        try:
-            from astrbot.api.event import MessageChain
-
-            chain = MessageChain(chain=[FileComp(name=rec["name"], file=str(self._path_of(rec)))])
-            ok = await self.context.send_message(umo, chain)
-            return json_response({"ok": bool(ok)})
-        except Exception as exc:
-            return json_response({"error": str(exc)}, status_code=500)
 
     async def _api_upload(self, **_):
         """一次性 base64 上传，或 upload_id + chunk_b64 分片续传（最后一片带 last=true）。"""
