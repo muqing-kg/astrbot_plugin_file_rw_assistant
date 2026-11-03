@@ -181,6 +181,11 @@ class StoreTest(unittest.TestCase):
         assert vlm.fill("JSON {\"a\":1} 与 {nope}", nope="?") == 'JSON {"a":1} 与 ?'
         assert vlm.fill("", count=1) == ""
 
+    def test_cues_keeps_timeline(self):
+        """字幕带时间轴解析：序号行丢掉，时间转成 [分:秒]。"""
+        srt = "1\n00:00:01,000 --> 00:00:03,500\n第一句\n\n2\n00:01:12,200 --> 00:01:15,000\nsecond\n"
+        assert vlm._cues(srt, 400) == "[00:01] 第一句\n[01:12] second"
+        assert vlm._cues("", 10) == ""
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

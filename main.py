@@ -36,7 +36,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.3.2", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.4.0", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -446,13 +446,14 @@ class FileAssistant(Star):
             interval=float(self.cfg.get("video_frame_interval") or 4),
             high=int(self.cfg.get("video_max_frames") or 24),
         )
-        frames = video_frames(path, work, count)
-        audio = ""
+        frames, times = video_frames(path, work, count)
+        audio, heard_seconds = "", 0.0
         if self.cfg.get("video_audio", True):
-            audio = extract_audio(
+            audio, heard_seconds = extract_audio(
                 path, work, int(self.cfg.get("video_audio_seconds") or 300)
             )
-        if not frames and not audio:
+        subs = subtitle_text(path)
+        if not frames and not audio and not subs:
             return "视频抽帧失败（ffmpeg 不可用或文件损坏）。"
         prompt = fill(
             str(self.cfg.get("video_prompt") or ""),
@@ -461,11 +462,16 @@ class FileAssistant(Star):
             frames=len(frames),
             audio="有" if audio else "无",
         )
+        if times:
+            marks = "、".join(f"{i + 1}@{t:.0f}s" for i, t in enumerate(times))
+            prompt += f"\n\n【帧位置】{len(times)} 帧分别取自第 {marks} 秒。"
+        if audio and seconds > heard_seconds + 1:
+            prompt += f"\n\n【原声范围】只听了前 {heard_seconds:.0f} 秒，全片 {seconds:.0f} 秒。"
+        if subs:
+            prompt += f"\n\n【字幕原文（带时间）】\n{subs}"
         desc = await self.vision.describe(frames, prompt=prompt, audio=audio)
         heard = "＋原声" if audio else ""
-        body = f"《{title}》按 {len(frames)} 帧{heard}看内容（时长 {seconds:.0f} 秒）：\n{desc}"
-        subs = subtitle_text(path)
-        return f"{body}\n\n【视频字幕】\n{subs}" if subs else body
+        return f"《{title}》按 {len(frames)} 帧{heard}看内容（时长 {seconds:.0f} 秒）：\n{desc}"
 
     def _resolve(self, key: str) -> dict[str, Any] | None:
         key = (key or "").strip()
