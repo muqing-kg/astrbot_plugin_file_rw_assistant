@@ -1,6 +1,6 @@
 const API = '/api/plug/astrbot_plugin_file_rw_assistant';
 const KIND_ORDER = ['word', 'excel', 'ppt', 'pdf', 'text', 'markdown', 'code', 'csv', 'video'];
-const state = { kind: '', q: '', items: [], counts: {}, labels: {}, current: null, error: '' };
+const state = { kind: '', q: '', items: [], counts: {}, labels: {}, error: '' };
 
 const $ = (id) => document.getElementById(id);
 
@@ -30,22 +30,41 @@ async function api(path, opt = {}) {
   return res.json();
 }
 
-async function downloadBlob(path) {
-  const VIEW = bridge();
-  if (VIEW) {
-    await VIEW.download(path.replace(/^\/+/, ''), {}, state.current ? state.current.name : 'download');
-    return;
-  }
+// 下载走桥的 files:download（父窗口带凭证取二进制）；直开页面时用 fetch+blob。
+async function downloadDirect(it) {
   let token = '';
   try { token = localStorage.getItem('token') || ''; } catch (e) { token = ''; }
-  const res = await fetch(API + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-  if (!res.ok) throw new Error(`${res.status}`);
+  const res = await fetch(`${API}/download?file_id=${encodeURIComponent(it.id)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   const url = URL.createObjectURL(await res.blob());
   const a = document.createElement('a');
   a.href = url;
-  a.download = state.current ? state.current.name : 'download';
+  a.download = it.name || 'download';
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function downloadFile(it) {
+  try {
+    const VIEW = bridge();
+    if (VIEW) await VIEW.download('download', { file_id: it.id }, it.name || 'download');
+    else await downloadDirect(it);
+  } catch (err) {
+    toast(`下载失败：${err.message}`);
+  }
+}
+
+async function deleteFile(id) {
+  if (!id) return;
+  try {
+    await api('/delete', { method: 'POST', body: JSON.stringify({ file_id: id }) });
+    await load();
+    toast('已删除');
+  } catch (err) {
+    toast(`删除失败：${err.message}`);
+  }
 }
 
 function toast(text) {
@@ -92,7 +111,6 @@ function renderTable() {
     ? `列表加载失败：${state.error}`
     : (state.kind ? '这个分类里还没有文件' : '左边先选一个类型');
   $('empty').hidden = state.items.length > 0;
-  $('table').hidden = state.items.length === 0;
   state.items.forEach((it) => {
     const tr = document.createElement('tr');
     const nameTd = document.createElement('td');
@@ -114,19 +132,18 @@ function renderTable() {
     cell(tr, it.updated_at);
     const actTd = document.createElement('td');
     actTd.className = 'actions-col';
-    const open = document.createElement('button');
-    open.type = 'button';
-    open.className = 'link';
-    open.textContent = '打开';
-    open.onclick = (e) => { e.stopPropagation(); openDrawer(it); };
+    const dl = document.createElement('button');
+    dl.type = 'button';
+    dl.className = 'link';
+    dl.textContent = '下载';
+    dl.onclick = (e) => { e.stopPropagation(); downloadFile(it); };
     const del = document.createElement('button');
     del.type = 'button';
     del.className = 'link link-danger';
     del.textContent = '删除';
     del.onclick = (e) => { e.stopPropagation(); deleteFile(it.id); };
-    actTd.append(open, del);
+    actTd.append(dl, del);
     tr.appendChild(actTd);
-    tr.onclick = () => openDrawer(it);
     body.appendChild(tr);
   });
 }
@@ -144,9 +161,7 @@ async function load() {
     state.error = '';
   } catch (err) {
     const V = bridge();
-    const why = V ? '桥已就绪' : '桥未注入';
-    state.error = `${err.message}（${why}）`;
-    toast(`列表加载失败：${err.message}（${why}）`);
+    state.error = `${err.message}（${V ? '桥已就绪' : '桥未注入'}）`;
   }
   let total = 0;
   Object.values(state.counts).forEach((n) => { total += n; });
@@ -155,135 +170,12 @@ async function load() {
   renderTable();
 }
 
-// 先打开抽屉再取数据：请求失败也一定有可见反馈，不会点了没反应
-async function openDrawer(item) {
-  const it = typeof item === 'string' ? { id: item, name: item } : item;
-  if (!it || !it.id) return;
-  state.current = it;
-  $('drawer').hidden = false;
-  $('d-name').textContent = it.name || '';
-  $('d-meta').textContent = `${state.labels[it.kind] || it.kind || ''} · ${it.updated_at || ''}`;
-  $('d-content').value = '';
-  $('d-hint').textContent = '正在读取…';
-  $('d-versions').innerHTML = '';
-  try {
-    const data = await api('/detail/' + encodeURIComponent(it.id));
-    const f = data.file;
-    if (!f) throw new Error('这个文件已经不在了，刷新一下');
-    state.current = f;
-    $('d-name').textContent = f.name;
-    $('d-meta').textContent = `${state.labels[f.kind] || f.kind} · ${human(f.size)} · v${f.current_version} · ${f.sender ? f.sender + ' · ' : ''}${f.session}`;
-    const content = await api('/content/' + encodeURIComponent(f.id));
-    const box = $('d-content');
-    box.value = content.text || '';
-    box.readOnly = !content.editable;
-    $('d-save').disabled = !content.editable;
-    $('d-hint').textContent = content.editable ? '改完点右边，存成新版本' : '这类文件不支持在线编辑';
-    const ul = $('d-versions');
-    ul.innerHTML = '';
-    (data.versions || []).forEach((v) => {
-      const li = document.createElement('li');
-      const info = document.createElement('span');
-      info.textContent = `v${v.version} · ${human(v.size)} · ${v.created_at}`;
-      const actions = document.createElement('span');
-      actions.className = 'v-actions';
-      const note = document.createElement('em');
-      note.textContent = v.note || '';
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'link';
-      btn.textContent = '回滚';
-      btn.onclick = () => rollback(f.id, v.version);
-      actions.append(note, btn);
-      li.append(info, actions);
-      ul.appendChild(li);
-    });
-  } catch (err) {
-    $('d-hint').textContent = `打开失败：${err.message}`;
-    toast(`打开失败：${err.message}`);
-  }
-}
-
-async function rollback(fileId, version) {
-  try {
-    await api('/rollback', { method: 'POST', body: JSON.stringify({ file_id: fileId, version }) });
-    await load();
-    await openDrawer(fileId);
-  } catch (err) {
-    toast(`回滚失败：${err.message}`);
-  }
-}
-
-async function saveContent() {
-  if (!state.current) return;
-  try {
-    await api('/save', {
-      method: 'POST',
-      body: JSON.stringify({ file_id: state.current.id, content: $('d-content').value }),
-    });
-    await load();
-    await openDrawer(state.current.id);
-    toast('已存为新版本');
-  } catch (err) {
-    toast(`保存失败：${err.message}`);
-  }
-}
-
-async function sendToSession() {
-  if (!state.current) return;
-  const umo = prompt('发到哪个会话？填 UMO，如 QQ-唐小珂:GroupMessage:652135583');
-  if (!umo) return;
-  try {
-    const r = await api('/send', { method: 'POST', body: JSON.stringify({ file_id: state.current.id, umo }) });
-    toast(r.ok ? '已发送' : '发送失败');
-  } catch (err) {
-    toast(`发送失败：${err.message}`);
-  }
-}
-
-async function deleteFile(id) {
-  if (!id) return;
-  try {
-    await api('/delete', { method: 'POST', body: JSON.stringify({ file_id: id }) });
-    $('drawer').hidden = true;
-    state.current = null;
-    await load();
-    toast('已删除');
-  } catch (err) {
-    toast(`删除失败：${err.message}`);
-  }
-}
-
-async function removeFile() {
-  return deleteFile(state.current && state.current.id);
-}
-
-$('q').oninput = (e) => { state.q = e.target.value.trim(); clearTimeout(window._t); window._t = setTimeout(load, 250); };
-$('refresh').onclick = load;
-$('d-close').onclick = () => { $('drawer').hidden = true; };
-$('d-save').onclick = saveContent;
-$('d-send').onclick = sendToSession;
-$('d-delete').onclick = removeFile;
-// 下载走桥（父窗口带凭证取文件），直接打开页面时才用 fetch+blob
-$('d-download').onclick = async () => {
-  if (!state.current) return;
-  try {
-    await downloadBlob(`/keyfile/${encodeURIComponent(state.current.id)}`);
-  } catch (err) {
-    toast(`下载失败：${err.message}`);
-  }
-};
-
-// 分片上传：8MB 一片，最后一片带 last=true 才入库
-// 面板桥把整块 base64 塞进 postMessage + axios，块小一点更稳
 const CHUNK = bridge() ? 2 * 1024 * 1024 : 8 * 1024 * 1024;
 
 function toB64(buf) {
   const bytes = new Uint8Array(buf);
   let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  }
+  for (let i = 0; i < bytes.length; i += 1) s += String.fromCharCode(bytes[i]);
   return btoa(s);
 }
 
@@ -304,7 +196,6 @@ async function uploadFile(file) {
     });
   }
   toast(`${file.name} 已入库`);
-  state.kind = '';
   await load();
 }
 
@@ -318,6 +209,8 @@ async function uploadFiles(list) {
   }
 }
 
+$('q').oninput = (e) => { state.q = e.target.value.trim(); clearTimeout(window._t); window._t = setTimeout(load, 250); };
+$('refresh').onclick = load;
 $('pick').onclick = () => $('file').click();
 $('file').onchange = (e) => uploadFiles(e.target.files);
 const card = $('card');

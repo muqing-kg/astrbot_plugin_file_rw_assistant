@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>文件读写小助手</title>
-  <link rel="stylesheet" href="./styles.css?v=1.5.0" />
+  <link rel="stylesheet" href="./styles.css?v=1.6.0" />
 </head>
 <body>
   <main class="page">
@@ -42,34 +42,7 @@
         <p class="empty-hint">在聊天里发一份文件，或者点右上角上传、直接把文件拖到这个框里。</p>
       </div>
     </section>
-
-    <aside class="drawer" id="drawer" hidden>
-      <div class="drawer-head">
-        <div>
-          <strong id="d-name"></strong>
-          <p class="hint" id="d-meta"></p>
-        </div>
-        <button class="ghost" id="d-close" type="button">关闭</button>
-      </div>
-      <div class="drawer-actions">
-        <button class="ghost" id="d-download" type="button">下载</button>
-        <button class="ghost" id="d-send" type="button">发到会话</button>
-        <button class="link-danger" id="d-delete" type="button">删除</button>
-      </div>
-      <section class="pane">
-        <h4>内容</h4>
-        <textarea id="d-content" spellcheck="false"></textarea>
-        <div class="pane-foot">
-          <span class="hint" id="d-hint"></span>
-          <button id="d-save" type="button" disabled>存为新版本</button>
-        </div>
-      </section>
-      <section class="pane">
-        <h4>版本历史</h4>
-        <ul class="versions" id="d-versions"></ul>
-      </section>
-    </aside>
   </main>
-  <script src="./app.js?v=1.5.0"></script>
+  <script src="./app.js?v=1.6.0"></script>
 </body>
 </html>

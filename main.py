@@ -36,7 +36,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.5.0", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.6.0", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -497,6 +497,7 @@ class FileAssistant(Star):
             ("/detail/{file_id}", self._api_detail, ["GET"]),
             ("/content/{file_id}", self._api_content, ["GET"]),
             ("/keyfile/{file_id}", self._api_keyfile, ["GET"]),
+            ("/download", self._api_download, ["GET"]),
             ("/save", self._api_save, ["POST"]),
             ("/delete", self._api_delete, ["POST"]),
             ("/rollback", self._api_rollback, ["POST"]),
@@ -543,6 +544,14 @@ class FileAssistant(Star):
         return json_response({"text": text, "editable": writers.is_textual(path)})
 
     async def _api_keyfile(self, file_id: str = "", **_):
+        return self._file_response(file_id)
+
+    async def _api_download(self, **_):
+        # 查询参数版下载：桥的 download 带 params 最稳，不依赖路径参数
+        file_id = (web_request.query.get("file_id") or "").strip()
+        return self._file_response(file_id)
+
+    def _file_response(self, file_id: str):
         rec = self.store.get(file_id)
         if not rec:
             return json_response({"error": "not found"}, status_code=404)
