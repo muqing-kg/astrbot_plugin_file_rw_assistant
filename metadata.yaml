@@ -6,7 +6,7 @@ help: >-
   模型可列出、读取、改写、生成与发送文件；可生成 Word/Excel/PPT，也可复制现有文件另存再改。
   扫描版 PDF 按页识别，视频按全片抽帧识别。面板提供文件列表、预览、在线编辑、回滚、上传与下载。
   限制：QQ 直发需 NapCat；.doc/.xls/.ppt 只能归档下载；Office 只能改已有单元格与文字；视频链接解析默认关闭。
-version: 1.2.1
+version: 1.2.2
 short_desc: 文件读写小助手：归档 + 读写 + 改写 + 发回
 author: 沐倾
 repo: https://github.com/muqing-kg/astrbot_plugin_file_rw_assistant

@@ -106,7 +106,12 @@ async function load() {
     state.items = data.items || [];
     state.counts = data.counts || {};
     state.labels = data.labels || {};
-    if (!state.kind) state.kind = firstNonEmpty(state.counts);
+    if (data.all) {
+      toast(`「${state.labels[data.all] || data.all}」里还没有文件，先显示全部`);
+      state.kind = '';
+    } else if (!state.kind) {
+      state.kind = firstNonEmpty(state.counts);
+    }
   } catch (err) {
     toast(`列表加载失败：${err.message}`);
   }
@@ -250,6 +255,7 @@ async function uploadFile(file) {
     });
   }
   toast(`${file.name} 已入库`);
+  state.kind = '';
   await load();
 }
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.2.1", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.2.2", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -255,8 +256,14 @@ class FileAssistant(Star):
                 import json as _json
 
                 parsed = _json.loads(ops) if isinstance(ops, str) else ops
-                result = writers.edit_office(path, parsed)
-                new = self.store.add_version(rec["id"], data=path.read_bytes(), note="模型就地改写")
+                # 在临时副本上改：直接改当前版本文件会把旧版本内容一起冲掉，回滚就回不到原样了
+                tmp = self._root() / "temp" / f"edit_{rec['id']}{path.suffix}"
+                tmp.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, tmp)
+                result = writers.edit_office(tmp, parsed)
+                data = tmp.read_bytes()
+                tmp.unlink(missing_ok=True)
+                new = self.store.add_version(rec["id"], data=data, note="模型就地改写")
                 echo = await readers.read(Path(new["path"]), limit=300)
                 return f"{result}；已存成第 {new['current_version']} 版。回读确认：{echo[:300]}"
             return "没有给内容或 ops，什么都没改。"
@@ -455,12 +462,20 @@ class FileAssistant(Star):
     async def _api_list(self, **_: Any):
         kind = (web_request.query.get("kind") or "").strip()
         keyword = (web_request.query.get("q") or "").strip()
+        items = self.store.search(kind=kind or None, query=keyword)
+        counts = self.store.counts()
+        fallback = ""
+        if kind and not items and any(counts.values()):
+            # 选中的类型是空的但库里明明有文件：退回全部，别让人以为文件丢了
+            items = self.store.search(query=keyword)
+            fallback = kind
         return json_response(
             {
-                "items": self.store.search(kind=kind or None, query=keyword),
-                "counts": self.store.counts(),
+                "items": items,
+                "counts": counts,
                 "stats": self.store.stats(),
                 "labels": KIND_LABELS,
+                "all": fallback,
             }
         )
 
