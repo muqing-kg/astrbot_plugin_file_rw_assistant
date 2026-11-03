@@ -245,6 +245,11 @@ table.files tbody tr:hover {
 .actions-col {
   width: 1%;
   text-align: right;
+  white-space: nowrap;
+}
+
+.actions-col button + button {
+  margin-left: 10px;
 }
 
 .empty {

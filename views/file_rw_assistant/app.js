@@ -121,7 +121,12 @@ function renderTable() {
     open.className = 'link';
     open.textContent = '打开';
     open.onclick = (e) => { e.stopPropagation(); openDrawer(it.id); };
-    actTd.appendChild(open);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'link link-danger';
+    del.textContent = '删除';
+    del.onclick = (e) => { e.stopPropagation(); deleteFile(it.id); };
+    actTd.append(open, del);
     tr.appendChild(actTd);
     tr.onclick = () => openDrawer(it.id);
     body.appendChild(tr);
@@ -158,16 +163,18 @@ async function load() {
 }
 
 async function openDrawer(id) {
-  const data = await api('/detail/' + encodeURIComponent(id));
-  const f = data.file;
-  state.current = f;
-  $('drawer').hidden = false;
-  $('d-name').textContent = f.name;
-  $('d-meta').textContent = `${state.labels[f.kind] || f.kind} · ${human(f.size)} · v${f.current_version} · ${f.sender ? f.sender + ' · ' : ''}${f.session}`;
-  const content = await api('/content/' + encodeURIComponent(f.id));
-  const box = $('d-content');
-  box.value = content.text || '';
-  box.readOnly = !content.editable;
+  try {
+    const data = await api('/detail/' + encodeURIComponent(id));
+    const f = data.file;
+    if (!f) throw new Error('这个文件已经不在了，刷新一下');
+    state.current = f;
+    $('drawer').hidden = false;
+    $('d-name').textContent = f.name;
+    $('d-meta').textContent = `${state.labels[f.kind] || f.kind} · ${human(f.size)} · v${f.current_version} · ${f.sender ? f.sender + ' · ' : ''}${f.session}`;
+    const content = await api('/content/' + encodeURIComponent(f.id));
+    const box = $('d-content');
+    box.value = content.text || '';
+    box.readOnly = !content.editable;
   $('d-save').disabled = !content.editable;
   $('d-hint').textContent = content.editable ? '改完点右边，存成新版本' : '这类文件不支持在线编辑';
   const ul = $('d-versions');
@@ -189,6 +196,9 @@ async function openDrawer(id) {
     li.append(info, actions);
     ul.appendChild(li);
   });
+  } catch (err) {
+    toast(`打开失败：${err.message}`);
+  }
 }
 
 async function rollback(fileId, version) {
@@ -228,9 +238,8 @@ async function sendToSession() {
   }
 }
 
-async function removeFile() {
-  if (!state.current) return;
-  const id = state.current.id;
+async function deleteFile(id) {
+  if (!id) return;
   try {
     await api('/delete', { method: 'POST', body: JSON.stringify({ file_id: id }) });
     $('drawer').hidden = true;
@@ -240,6 +249,10 @@ async function removeFile() {
   } catch (err) {
     toast(`删除失败：${err.message}`);
   }
+}
+
+async function removeFile() {
+  return deleteFile(state.current && state.current.id);
 }
 
 $('q').oninput = (e) => { state.q = e.target.value.trim(); clearTimeout(window._t); window._t = setTimeout(load, 250); };
