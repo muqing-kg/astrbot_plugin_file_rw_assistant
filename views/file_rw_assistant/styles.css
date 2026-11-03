@@ -371,3 +371,31 @@ textarea {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* 内联预览：点「查看」在表格下方展开，不需要侧边抽屉 */
+.viewer {
+  margin-top: 16px;
+}
+
+.viewer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewer textarea {
+  width: 100%;
+  min-height: 320px;
+  margin-top: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}

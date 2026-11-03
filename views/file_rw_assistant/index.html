@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>文件读写小助手</title>
-  <link rel="stylesheet" href="./styles.css?v=1.6.0" />
+  <link rel="stylesheet" href="./styles.css?v=1.7.0" />
 </head>
 <body>
   <main class="page">
@@ -42,7 +42,20 @@
         <p class="empty-hint">在聊天里发一份文件，或者点右上角上传、直接把文件拖到这个框里。</p>
       </div>
     </section>
+
+    <section class="card viewer" id="viewer" hidden>
+      <div class="viewer-head">
+        <strong id="v-name"></strong>
+        <div class="viewer-actions">
+          <select id="v-version"></select>
+          <button class="ghost" id="v-download" type="button">下载</button>
+          <button class="ghost" id="v-close" type="button">关闭</button>
+        </div>
+      </div>
+      <p class="hint" id="v-meta"></p>
+      <textarea id="v-text" spellcheck="false" readonly></textarea>
+    </section>
   </main>
-  <script src="./app.js?v=1.6.0"></script>
+  <script src="./app.js?v=1.7.0"></script>
 </body>
 </html>

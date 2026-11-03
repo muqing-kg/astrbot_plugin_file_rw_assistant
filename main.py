@@ -36,7 +36,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.6.0", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.7.0", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -498,6 +498,7 @@ class FileAssistant(Star):
             ("/content/{file_id}", self._api_content, ["GET"]),
             ("/keyfile/{file_id}", self._api_keyfile, ["GET"]),
             ("/download", self._api_download, ["GET"]),
+            ("/file", self._api_file, ["GET"]),
             ("/save", self._api_save, ["POST"]),
             ("/delete", self._api_delete, ["POST"]),
             ("/rollback", self._api_rollback, ["POST"]),
@@ -544,18 +545,50 @@ class FileAssistant(Star):
         return json_response({"text": text, "editable": writers.is_textual(path)})
 
     async def _api_keyfile(self, file_id: str = "", **_):
-        return self._file_response(file_id)
+        return self._file_response(file_id, web_request.query.get("version"))
 
     async def _api_download(self, **_):
         # 查询参数版下载：桥的 download 带 params 最稳，不依赖路径参数
-        file_id = (web_request.query.get("file_id") or "").strip()
-        return self._file_response(file_id)
+        return self._file_response(
+            (web_request.query.get("file_id") or "").strip(),
+            web_request.query.get("version"),
+        )
 
-    def _file_response(self, file_id: str):
+    async def _api_file(self, **_):
+        # 预览：一次取回文件信息、内容与该文件所有版本
+        file_id = (web_request.query.get("file_id") or "").strip()
         rec = self.store.get(file_id)
         if not rec:
             return json_response({"error": "not found"}, status_code=404)
-        return file_response(self._path_of(rec), filename=rec["name"])
+        versions = self.store.versions(file_id)
+        want = str(web_request.query.get("version") or "").strip()
+        ver = int(rec.get("current_version") or 1)
+        if want.isdigit():
+            ver = int(want)
+        path = self._path_of(rec, ver)
+        try:
+            text = await readers.read(path, ocr=False, limit=200000)
+        except Exception as exc:
+            text = f"（读取失败：{exc}）"
+        return json_response(
+            {
+                "file": rec,
+                "versions": versions,
+                "version": ver,
+                "text": text,
+                "editable": writers.is_textual(path),
+            }
+        )
+
+    def _file_response(self, file_id: str, version: Any = None):
+        rec = self.store.get(file_id)
+        if not rec:
+            return json_response({"error": "not found"}, status_code=404)
+        ver = int(rec.get("current_version") or 1)
+        raw = str(version or "").strip()
+        if raw.isdigit():
+            ver = int(raw)
+        return file_response(self._path_of(rec, ver), filename=rec["name"])
 
     async def _api_save(self, **_):
         body = await web_request.json(default={}) or {}

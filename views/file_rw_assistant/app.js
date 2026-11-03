@@ -31,10 +31,12 @@ async function api(path, opt = {}) {
 }
 
 // 下载走桥的 files:download（父窗口带凭证取二进制）；直开页面时用 fetch+blob。
-async function downloadDirect(it) {
+async function downloadDirect(it, version) {
   let token = '';
   try { token = localStorage.getItem('token') || ''; } catch (e) { token = ''; }
-  const res = await fetch(`${API}/download?file_id=${encodeURIComponent(it.id)}`, {
+  const q = new URLSearchParams({ file_id: it.id });
+  if (version) q.set('version', String(version));
+  const res = await fetch(`${API}/download?${q}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -46,13 +48,46 @@ async function downloadDirect(it) {
   URL.revokeObjectURL(url);
 }
 
-async function downloadFile(it) {
+async function downloadFile(it, version) {
   try {
     const VIEW = bridge();
-    if (VIEW) await VIEW.download('download', { file_id: it.id }, it.name || 'download');
-    else await downloadDirect(it);
+    const params = { file_id: it.id };
+    if (version) params.version = String(version);
+    if (VIEW) await VIEW.download('download', params, it.name || 'download');
+    else await downloadDirect(it, version);
   } catch (err) {
     toast(`下载失败：${err.message}`);
+  }
+}
+
+let viewing = null;
+
+// 点「查看」出内联预览：文本类直接看，Office/PDF 给出提示；可切历史版本并下载那一版
+async function openViewer(it, version) {
+  viewing = { ...it, version };
+  $('viewer').hidden = false;
+  $('v-name').textContent = it.name || '';
+  $('v-meta').textContent = '正在读取…';
+  $('v-text').value = '';
+  $('v-version').innerHTML = '';
+  try {
+    const q = new URLSearchParams({ file_id: it.id });
+    if (version) q.set('version', String(version));
+    const d = await api(`/file?${q}`);
+    $('v-meta').textContent = `${d.file ? d.file.kind : ''} · v${d.version}${d.editable ? '' : ' · 二进制文件不显示正文，可下载查看'}`;
+    $('v-text').value = d.text || '';
+    $('v-text').readOnly = true;
+    const sel = $('v-version');
+    (d.versions || []).forEach((v) => {
+      const opt = document.createElement('option');
+      opt.value = v.version;
+      opt.textContent = `v${v.version} · ${v.created_at}`;
+      opt.selected = Number(v.version) === Number(d.version);
+      sel.appendChild(opt);
+    });
+    viewing = { ...it, version: d.version };
+  } catch (err) {
+    $('v-meta').textContent = `读取失败：${err.message}`;
   }
 }
 
@@ -135,8 +170,8 @@ function renderTable() {
     const dl = document.createElement('button');
     dl.type = 'button';
     dl.className = 'link';
-    dl.textContent = '下载';
-    dl.onclick = (e) => { e.stopPropagation(); downloadFile(it); };
+    dl.textContent = '查看';
+    dl.onclick = (e) => { e.stopPropagation(); openViewer(it); };
     const del = document.createElement('button');
     del.type = 'button';
     del.className = 'link link-danger';
@@ -211,6 +246,12 @@ async function uploadFiles(list) {
 
 $('q').oninput = (e) => { state.q = e.target.value.trim(); clearTimeout(window._t); window._t = setTimeout(load, 250); };
 $('refresh').onclick = load;
+$('v-close').onclick = () => { $('viewer').hidden = true; viewing = null; };
+$('v-download').onclick = () => { if (viewing) downloadFile(viewing, viewing.version); };
+$('v-version').onchange = (e) => {
+  if (!viewing) return;
+  openViewer(viewing, Number(e.target.value));
+};
 $('pick').onclick = () => $('file').click();
 $('file').onchange = (e) => uploadFiles(e.target.files);
 const card = $('card');
