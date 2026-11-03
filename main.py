@@ -36,7 +36,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.4.4", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.4.5", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)

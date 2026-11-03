@@ -1,11 +1,13 @@
 const API = '/api/plug/astrbot_plugin_file_rw_assistant';
 const KIND_ORDER = ['word', 'excel', 'ppt', 'pdf', 'text', 'markdown', 'code', 'csv', 'video'];
-const state = { kind: '', q: '', items: [], counts: {}, labels: {}, current: null };
+const state = { kind: '', q: '', items: [], counts: {}, labels: {}, current: null, error: '' };
 
 const $ = (id) => document.getElementById(id);
 
 function headers() {
-  const token = localStorage.getItem('token');
+  let token = '';
+  // ponytail: 页面若被塞进 sandbox iframe，localStorage 会抛 SecurityError
+  try { token = localStorage.getItem('token') || ''; } catch (e) { token = ''; }
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -63,6 +65,7 @@ function cell(tr, value, className) {
 function renderTable() {
   const body = $('table').querySelector('tbody');
   body.innerHTML = '';
+  $('empty').textContent = state.error ? `列表加载失败：${state.error}` : '这个分类里还没有文件';
   $('empty').hidden = state.items.length > 0;
   $('table').hidden = state.items.length === 0;
   state.items.forEach((it) => {
@@ -107,6 +110,7 @@ async function load() {
     state.items = data.items || [];
     state.counts = data.counts || {};
     state.labels = data.labels || {};
+    state.error = '';
     if (data.all) {
       toast(`「${state.labels[data.all] || data.all}」里还没有文件，先显示全部`);
       state.kind = '';
@@ -114,6 +118,7 @@ async function load() {
       state.kind = firstNonEmpty(state.counts);
     }
   } catch (err) {
+    state.error = err.message;
     toast(`列表加载失败：${err.message}`);
   }
   let total = 0;
