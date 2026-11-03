@@ -29,13 +29,20 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.3.0", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.3.1", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
+        # 配置项按功能分组后是嵌套的，这里拍平成一层，读的时候不用带组名
+        self.cfg: dict[str, Any] = {}
+        for _k, _v in dict(config or {}).items():
+            if isinstance(_v, dict):
+                self.cfg.update(_v)
+            else:
+                self.cfg[_k] = _v
         self.vision = Vision(
-            self._vision_provider, str(self.config.get("vision_prompt") or "")
+            self._vision_provider, str(self.cfg.get("vision_prompt") or "")
         )
         self._cleaner: asyncio.Task | None = None
         self._register_web_api()
@@ -53,14 +60,14 @@ class FileAssistant(Star):
         if not hasattr(self, "_store"):
             self._store = FileStore(
                 self._root(),
-                retention_days=int(self.config.get("retention_days") or 90),
-                max_versions=int(self.config.get("max_versions") or 20),
+                retention_days=int(self.cfg.get("retention_days") or 90),
+                max_versions=int(self.cfg.get("max_versions") or 20),
             )
         return self._store
 
     async def initialize(self) -> None:
         self.store
-        if self.config.get("auto_cleanup", True):
+        if self.cfg.get("auto_cleanup", True):
             self._cleaner = asyncio.create_task(self._cleanup_loop())
         logger.info(f"[文件读写小助手] 已就绪，存储于 {self._root()}")
 
@@ -83,7 +90,7 @@ class FileAssistant(Star):
 
     # ── 模型选择 ─────────────────────────────────────────────
     async def _provider_by(self, key: str):
-        pid = str(self.config.get(key) or "").strip()
+        pid = str(self.cfg.get(key) or "").strip()
         try:
             if pid:
                 provider = self.context.get_provider_by_id(pid)
@@ -103,7 +110,7 @@ class FileAssistant(Star):
         if provider is None:
             return text
         try:
-            instruction = str(self.config.get("summary_prompt") or "").strip() or (
+            instruction = str(self.cfg.get("summary_prompt") or "").strip() or (
                 "把下面的文档正文压缩成不超过 800 字的要点，数字、名称、结论必须保留。"
             )
             brief = await provider.text_chat(
@@ -118,8 +125,8 @@ class FileAssistant(Star):
     # ── 入库 ─────────────────────────────────────────────────
     def _limit_mb(self, kind: str) -> int:
         if kind == "video":
-            return int(self.config.get("max_video_mb") or 2048)
-        return int(self.config.get("max_file_mb") or 200)
+            return int(self.cfg.get("max_video_mb") or 2048)
+        return int(self.cfg.get("max_file_mb") or 200)
 
     def _ingest(self, path: Path, name: str, session: str, sender: str) -> dict[str, Any]:
         kind = kind_of(name) or kind_of(path.name)
@@ -228,13 +235,14 @@ class FileAssistant(Star):
             return await self._describe_video(path, rec["name"])
         text = await readers.read(
             path,
-            ocr=bool(self.config.get("enable_pdf_ocr", True)),
+            limit=int(self.cfg.get("read_max_chars") or 8000),
+            ocr=bool(self.cfg.get("enable_pdf_ocr", True)),
             vision=self.vision,
             pages=pages or "",
             lines=lines or "",
             find=find or "",
         )
-        pid = str(self.config.get("text_model_provider_id") or "").strip()
+        pid = str(self.cfg.get("text_model_provider_id") or "").strip()
         if pid and len(text) > 6000:
             text = await self._condense(text, pid)
         return f"《{rec['name']}》第 {version or rec['current_version']} 版内容：\n{text}"
@@ -342,7 +350,9 @@ class FileAssistant(Star):
             target = self.store.temp_dir / f"{rec['id']}_v{version}{rec['ext']}"
             writers.copy_for(path, target)
             path = target
-        return await send_file(event, path, rec["name"])
+        return await send_file(
+            event, path, rec["name"], max_mb=int(self.cfg.get("send_max_mb") or 100)
+        )
 
     @filter.llm_tool(name="file_pdf")
     async def file_pdf(
@@ -390,15 +400,15 @@ class FileAssistant(Star):
             url(string): 视频链接
             keep(bool): true 表示顺便存进文件读写小助手，false 表示看完就删
         """
-        if not self.config.get("video_link_enabled", False):
+        if not self.cfg.get("video_link_enabled", False):
             return "视频链接解析已关闭。"
         if not url.lower().startswith(("http://", "https://")):
             return "这不是一个链接。"
         path, title = links.fetch(
             url,
             self.store.temp_dir / "links",
-            cookies=str(self.config.get("video_link_cookies") or ""),
-            max_mb=int(self.config.get("max_video_mb") or 2048),
+            cookies=str(self.cfg.get("video_link_cookies") or ""),
+            max_mb=int(self.cfg.get("max_video_mb") or 2048),
         )
         if not path:
             return f"视频下载失败：{title}"
@@ -415,10 +425,8 @@ class FileAssistant(Star):
             )
             return f"{desc}\n已存进文件读写小助手：{rec['name']}（id={rec['id']}）"
         finally:
-            if keep and self.config.get("video_link_auto_delete", True):
-                path.unlink(missing_ok=True)
-            elif not keep:
-                path.unlink(missing_ok=True)
+            # 入库是复制进库的，临时文件无论保不保留都删
+            path.unlink(missing_ok=True)
 
     # ── 内部工具方法 ─────────────────────────────────────────
     async def _describe_video(self, path: Path, title: str) -> str:
@@ -426,20 +434,19 @@ class FileAssistant(Star):
         seconds = duration_of(path)
         count = frames_for(
             seconds,
-            interval=float(self.config.get("video_frame_interval") or 4),
-            low=int(self.config.get("video_min_frames") or 4),
-            high=int(self.config.get("video_max_frames") or 24),
+            interval=float(self.cfg.get("video_frame_interval") or 4),
+            high=int(self.cfg.get("video_max_frames") or 24),
         )
         frames = video_frames(path, work, count)
         audio = ""
-        if self.config.get("video_audio", True):
+        if self.cfg.get("video_audio", True):
             audio = extract_audio(
-                path, work, int(self.config.get("video_audio_seconds") or 300)
+                path, work, int(self.cfg.get("video_audio_seconds") or 300)
             )
         if not frames and not audio:
             return "视频抽帧失败（ffmpeg 不可用或文件损坏）。"
         desc = await self.vision.describe(
-            frames, prompt=str(self.config.get("video_prompt") or ""), audio=audio
+            frames, prompt=str(self.cfg.get("video_prompt") or ""), audio=audio
         )
         heard = "＋原声" if audio else ""
         body = f"《{title}》按 {len(frames)} 帧{heard}看内容（时长 {seconds:.0f} 秒）：\n{desc}"

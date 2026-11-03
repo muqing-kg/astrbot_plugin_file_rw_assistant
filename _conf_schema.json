@@ -1,116 +1,153 @@
 {
-  "retention_days": {
-    "type": "int",
-    "description": "保留天数",
-    "default": 90,
-    "hint": "文件入库后超过这个天数自动删除，0 表示永久保留"
+  "存储与清理": {
+    "type": "object",
+    "description": "存储与清理",
+    "hint": "收进来的文件放多久、留几个版本、单个多大",
+    "items": {
+      "retention_days": {
+        "type": "int",
+        "description": "文件保留天数",
+        "default": 90,
+        "hint": "到期由清理任务自动删除，面板也能随时手删"
+      },
+      "max_versions": {
+        "type": "int",
+        "description": "单文件最多保留版本数",
+        "default": 20,
+        "hint": "超出后最旧的版本被删"
+      },
+      "max_file_mb": {
+        "type": "int",
+        "description": "文档单文件上限 (MB)",
+        "default": 200,
+        "hint": "超过即不入库，只在聊天里提示"
+      },
+      "max_video_mb": {
+        "type": "int",
+        "description": "视频单文件上限 (MB)",
+        "default": 2048,
+        "hint": "视频体积大，单独设限；视频链接下载也用它"
+      },
+      "auto_cleanup": {
+        "type": "bool",
+        "description": "启用到期自动清理",
+        "default": true,
+        "hint": "关掉后只保留手动删除"
+      }
+    }
   },
-  "max_versions": {
-    "type": "int",
-    "description": "单文件版本上限",
-    "default": 20,
-    "hint": "超出后自动淘汰最旧的版本，最新版始终保留"
+  "视频理解": {
+    "type": "object",
+    "description": "视频理解",
+    "hint": "怎么抽帧、要不要听声音",
+    "items": {
+      "video_frame_interval": {
+        "type": "float",
+        "description": "每隔几秒抽一帧",
+        "default": 4,
+        "hint": "帧数 = 时长 ÷ 该值，再受最大帧数限制"
+      },
+      "video_max_frames": {
+        "type": "int",
+        "description": "最多抽几帧",
+        "default": 24,
+        "hint": "长视频封顶帧数，越多越慢越贵"
+      },
+      "video_audio": {
+        "type": "bool",
+        "description": "把原声一起交给模型",
+        "default": true,
+        "hint": "需要模型能听音频；关闭后只看画面"
+      },
+      "video_audio_seconds": {
+        "type": "int",
+        "description": "原声最多送多少秒",
+        "default": 300,
+        "hint": "只送开头这段，避免长视频音频太占上下文"
+      },
+      "video_prompt": {
+        "type": "text",
+        "description": "视频理解提示词",
+        "default": "按顺序描述画面里发生的事，有人物就说在做什么；能听到声音就把说话内容、语气与环境声一并写出来；看到字幕或画面文字就照抄。不要寒暄，不要复述指令。",
+        "hint": "留空则用这段默认文本"
+      }
+    }
   },
-  "max_file_mb": {
-    "type": "int",
-    "description": "文档类单文件上限 (MB)",
-    "default": 200,
-    "hint": "超过即不入库，只在聊天里提示"
+  "文档与图片": {
+    "type": "object",
+    "description": "文档与图片",
+    "hint": "读多少字、扫描件要不要识图、提示词怎么定",
+    "items": {
+      "read_max_chars": {
+        "type": "int",
+        "description": "单次读文档最多返回多少字",
+        "default": 8000,
+        "hint": "超出会被截断；要定位某段用 file_read 的 find/lines/pages"
+      },
+      "enable_pdf_ocr": {
+        "type": "bool",
+        "description": "扫描版 PDF 转图识别",
+        "default": true,
+        "hint": "PDF 没有文字层时整页渲染后交视觉模型"
+      },
+      "vision_prompt": {
+        "type": "text",
+        "description": "图片与文档插图提示词",
+        "default": "逐张描述这些图片里能读到的内容。有文字就照抄关键文字与原意，是表格就还原成文字表格，是界面就说明在讲什么。不要寒暄，不要复述指令。",
+        "hint": "文档插图、扫描件整页渲染都走这段"
+      },
+      "summary_prompt": {
+        "type": "text",
+        "description": "长文档摘要提示词",
+        "default": "把下面的文档正文压缩成不超过 800 字的要点，数字、名称、结论必须保留。",
+        "hint": "正文超过 6000 字且配了文本模型时用它压缩"
+      }
+    }
   },
-  "max_video_mb": {
-    "type": "int",
-    "description": "视频单文件上限 (MB)",
-    "default": 2048,
-    "hint": "视频体积大，单独设限"
+  "模型": {
+    "type": "object",
+    "description": "模型",
+    "hint": "留空则跟随框架当前使用的模型",
+    "items": {
+      "text_model_provider_id": {
+        "type": "string",
+        "description": "文本模型",
+        "default": "",
+        "hint": "长文档压缩用",
+        "_special": "select_provider"
+      },
+      "vision_model_provider_id": {
+        "type": "string",
+        "description": "视觉模型",
+        "default": "",
+        "hint": "图片、扫描件、视频帧与原声识别用",
+        "_special": "select_provider"
+      }
+    }
   },
-  "video_frame_interval": {
-    "type": "float",
-    "description": "视频每隔几秒抽一帧",
-    "default": 4,
-    "hint": "帧数由时长自动算：时长除以该值，再夹在最小与最大帧数之间"
-  },
-  "video_min_frames": {
-    "type": "int",
-    "description": "视频最少抽几帧",
-    "default": 4,
-    "hint": "短视频也至少抽这么多帧"
-  },
-  "video_max_frames": {
-    "type": "int",
-    "description": "视频最多抽几帧",
-    "default": 24,
-    "hint": "长视频封顶帧数，越多越慢越贵"
-  },
-  "video_audio": {
-    "type": "bool",
-    "description": "把视频原声一起交给模型",
-    "default": true,
-    "hint": "需要模型能听音频；关闭后只看画面"
-  },
-  "video_audio_seconds": {
-    "type": "int",
-    "description": "原声最多送多少秒",
-    "default": 300,
-    "hint": "只送开头这段，避免长视频音频太占上下文"
-  },
-  "video_prompt": {
-    "type": "text",
-    "description": "视频理解提示词",
-    "default": "按顺序描述画面里发生的事，有人物就说在做什么；能听到声音就把说话内容、语气与环境声一并写出来；看到字幕或画面文字就照抄。不要寒暄，不要复述指令。",
-    "hint": "留空则使用这段默认文本"
-  },
-  "vision_prompt": {
-    "type": "text",
-    "description": "图片与文档内嵌图提示词",
-    "default": "逐张描述这些图片里能读到的内容。有文字就照抄关键文字与原意，是表格就还原成文字表格，是界面就说明在讲什么。不要寒暄，不要复述指令。",
-    "hint": "文档里抽出的插图、扫描件整页渲染都走这段提示词"
-  },
-  "summary_prompt": {
-    "type": "text",
-    "description": "长文档摘要提示词",
-    "default": "把下面的文档正文压缩成不超过 800 字的要点，数字、名称、结论必须保留。",
-    "hint": "正文超过 6000 字且配了文本模型时用它压缩"
-  },
-  "auto_cleanup": {
-    "type": "bool",
-    "description": "启用到期自动清理",
-    "default": true
-  },
-  "text_model_provider_id": {
-    "type": "string",
-    "description": "文本模型",
-    "default": "",
-    "_special": "select_provider",
-    "hint": "留空 = 跟随框架当前模型；用于把长文档正文压缩成摘要"
-  },
-  "vision_model_provider_id": {
-    "type": "string",
-    "description": "视觉模型",
-    "default": "",
-    "_special": "select_provider",
-    "hint": "留空 = 跟随框架当前模型；用于 PDF 内嵌图、Office 插图、视频抽帧"
-  },
-  "enable_pdf_ocr": {
-    "type": "bool",
-    "description": "PDF 文字层为空时按图识别",
-    "default": true,
-    "hint": "扫描件靠视觉模型读，纯文字 PDF 不受影响"
-  },
-  "video_link_enabled": {
-    "type": "bool",
-    "description": "允许解析视频链接",
-    "default": false,
-    "hint": "默认关闭：yt-dlp 对部分站点要 cookies，且平台改接口就会失败。需要时再打开"
-  },
-  "video_link_auto_delete": {
-    "type": "bool",
-    "description": "解析完删除临时视频",
-    "default": true
-  },
-  "video_link_cookies": {
-    "type": "string",
-    "description": "视频站点 cookies",
-    "default": "",
-    "hint": "抖音等需要登录的站点，填 Netscape 格式 cookies 文本"
+  "发回与链接": {
+    "type": "object",
+    "description": "发回与链接",
+    "hint": "往聊天里发文件的限制，以及视频链接解析",
+    "items": {
+      "send_max_mb": {
+        "type": "int",
+        "description": "发回单个文件上限 (MB)",
+        "default": 100,
+        "hint": "超限只回面板提示，避免把平台调用卡死"
+      },
+      "video_link_enabled": {
+        "type": "bool",
+        "description": "允许解析视频链接",
+        "default": false,
+        "hint": "需要容器内有 yt-dlp；平台改接口时可能失败"
+      },
+      "video_link_cookies": {
+        "type": "string",
+        "description": "视频链接 cookies",
+        "default": "",
+        "hint": "需要登录态的平台填 Netscape cookies 文本或文件路径"
+      }
+    }
   }
 }

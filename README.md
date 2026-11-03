@@ -49,25 +49,49 @@ AstrBot 插件：自动归档聊天中的文件，并向模型提供文件读取
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `retention_days` | int | `90` | 文件保留天数，`0` 表示永久保留 |
-| `max_versions` | int | `20` | 单个文件的版本数量上限 |
-| `max_file_mb` | int | `200` | 单个文件大小上限（MB） |
-| `max_video_mb` | int | `2048` | 单个视频大小上限（MB） |
+### 存储与清理
+
+| 键 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `retention_days` | int | `90` | 文件保留天数，到期自动删除 |
+| `max_versions` | int | `20` | 单文件最多保留版本数 |
+| `max_file_mb` | int | `200` | 文档单文件上限（MB） |
+| `max_video_mb` | int | `2048` | 视频单文件上限（MB） |
+| `auto_cleanup` | bool | `true` | 启用到期自动清理 |
+
+### 视频理解
+
+| 键 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
 | `video_frame_interval` | float | `4` | 每隔几秒抽一帧，帧数由时长自动算出 |
-| `video_min_frames` | int | `4` | 视频最少抽几帧 |
 | `video_max_frames` | int | `24` | 视频最多抽几帧 |
 | `video_audio` | bool | `true` | 是否把视频原声一起交给模型 |
 | `video_audio_seconds` | int | `300` | 原声最多送多少秒 |
 | `video_prompt` | text | 见默认值 | 视频理解提示词 |
+
+### 文档与图片
+
+| 键 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `read_max_chars` | int | `8000` | 单次读文档最多返回多少字 |
+| `enable_pdf_ocr` | bool | `true` | 扫描版 PDF 转图识别 |
 | `vision_prompt` | text | 见默认值 | 图片与文档内嵌图提示词 |
 | `summary_prompt` | text | 见默认值 | 长文档摘要提示词 |
-| `auto_cleanup` | bool | `true` | 是否启用定时清理（每 6 小时一次） |
-| `text_model_provider_id` | string | 空 | 超过 6000 字的正文先交这个模型压缩成要点；留空跟随当前会话模型 |
-| `vision_model_provider_id` | string | 空 | 图像与视频识别使用的模型；留空跟随当前会话模型 |
-| `enable_pdf_ocr` | bool | `true` | PDF 无文字层时启用整页渲染识别 |
+
+### 模型
+
+| 键 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `text_model_provider_id` | string | 空 | 长文档压缩使用的模型；留空跟随当前会话模型 |
+| `vision_model_provider_id` | string | 空 | 图片与视频识别使用的模型；留空跟随当前会话模型 |
+
+### 发回与链接
+
+| 键 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `send_max_mb` | int | `100` | 发回单个文件上限（MB），超限只回面板提示 |
 | `video_link_enabled` | bool | `false` | 是否允许解析视频链接；默认关闭，需要时打开 |
-| `video_link_auto_delete` | bool | `true` | 链接解析下载的文件是否在用完后删除 |
-| `video_link_cookies` | string | 空 | 需要登录的平台所用的 cookies 文件绝对路径 |
+| `video_link_cookies` | string | 空 | 需要登录态平台的 cookies（文本或文件路径） |
 
 ## 使用方式
 

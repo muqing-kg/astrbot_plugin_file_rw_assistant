@@ -155,6 +155,26 @@ class StoreTest(unittest.TestCase):
         assert uri.startswith("data:audio/mp3;base64,"), uri[:40]
         assert vlm.subtitle_text(src) == ""
 
+    def test_schema_groups_cover_all_keys(self):
+        """配置项按组收纳后，拍平出来的键与预期一致，且没有重复。"""
+        import json
+
+        schema = json.loads(
+            (Path(__file__).resolve().parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
+        )
+        flat = []
+        for group, body in schema.items():
+            assert body.get("type") == "object", group
+            flat.extend(body["items"].keys())
+        assert len(flat) == len(set(flat)), "配置键重复"
+        assert set(flat) == {
+            "retention_days", "max_versions", "max_file_mb", "max_video_mb", "auto_cleanup",
+            "video_frame_interval", "video_max_frames", "video_audio", "video_audio_seconds",
+            "video_prompt", "read_max_chars", "enable_pdf_ocr", "vision_prompt",
+            "summary_prompt", "text_model_provider_id", "vision_model_provider_id",
+            "send_max_mb", "video_link_enabled", "video_link_cookies",
+        }
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
