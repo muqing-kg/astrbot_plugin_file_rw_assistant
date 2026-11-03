@@ -1,6 +1,6 @@
 name: astrbot_plugin_file_rw_assistant
 display_name: 文件读写小助手
-desc: 自动归档聊天中的文档、代码与视频，供模型读取解析、改写、生成与发回，附版本历史与面板管理
+desc: 自动归档聊天中的文档、代码与视频，可读取理解、改写、生成、发回，带版本历史与面板管理
 help: >-
   归档群聊与私聊中的文档、代码和视频，按会话分目录保存，保留版本历史，到期自动清理。
   读取：文本、Markdown、代码、CSV 直接读；Word、Excel、PPT、PDF 解析正文；扫描版 PDF 按页渲染交视觉模型识别。
@@ -9,8 +9,8 @@ help: >-
   发回：按平台能力直发原文件，发送失败时提示文件已在库中，可在面板下载。
   面板：文件列表与类型筛选、正文预览与在线编辑、版本回滚、下载、发送到会话、删除、拖拽分片上传。
   限制：QQ 直发需 NapCat；.doc/.xls/.ppt 只能归档与下载；Office 只改已有内容，不新增行列形状；PDF 仅页面级操作；视频链接解析默认关闭。
-version: 1.4.2
-short_desc: 聊天文件与文档归档，可读、可改、可生成、可发回
+version: 1.4.3
+short_desc: 归档聊天中的文件与视频，可读、可改、可生成、可发回
 author: 沐倾
 repo: https://github.com/muqing-kg/astrbot_plugin_file_rw_assistant
 astrbot_version: ">=4.16,<5"
