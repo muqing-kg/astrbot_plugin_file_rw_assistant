@@ -6,16 +6,18 @@ const $ = (id) => document.getElementById(id);
 
 // 面板把插件页放进 sandbox iframe（无 allow-same-origin），localStorage 与 Cookie
 // 都取不到，只能走面板注入的 AstrBotPluginView 桥（postMessage 转发到父窗口带凭证请求）。
-const VIEW = window.AstrBotPluginView;
+// 桥的 <script> 由面板插在 </body> 前，晚于本文件执行，所以只能调用时再取。
+const bridge = () => window.AstrBotPluginView || window.AstrBotPluginPage;
 
 async function api(path, opt = {}) {
   const [p, qs] = path.split('?');
-  const endpoint = API + p;
+  const rel = p.replace(/^\/+/, '');
+  const VIEW = bridge();
   if (VIEW) {
     if ((opt.method || 'GET').toUpperCase() === 'POST') {
-      return VIEW.apiPost(endpoint, JSON.parse(opt.body || '{}'));
+      return VIEW.apiPost(rel, JSON.parse(opt.body || '{}'));
     }
-    return VIEW.apiGet(endpoint, Object.fromEntries(new URLSearchParams(qs || '')));
+    return VIEW.apiGet(rel, Object.fromEntries(new URLSearchParams(qs || '')));
   }
   // 直接打开页面（不在面板 iframe 里）时的兜底
   let token = '';
@@ -29,8 +31,9 @@ async function api(path, opt = {}) {
 }
 
 async function downloadBlob(path) {
+  const VIEW = bridge();
   if (VIEW) {
-    await VIEW.download(API + path, {}, state.current ? state.current.name : 'download');
+    await VIEW.download(path.replace(/^\/+/, ''), {}, state.current ? state.current.name : 'download');
     return;
   }
   let token = '';
@@ -254,7 +257,8 @@ $('d-download').onclick = async () => {
 };
 
 // 分片上传：8MB 一片，最后一片带 last=true 才入库
-const CHUNK = 8 * 1024 * 1024;
+// 面板桥把整块 base64 塞进 postMessage + axios，块小一点更稳
+const CHUNK = bridge() ? 2 * 1024 * 1024 : 8 * 1024 * 1024;
 
 function toB64(buf) {
   const bytes = new Uint8Array(buf);
