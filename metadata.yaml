@@ -1,0 +1,26 @@
+name: astrbot_plugin_file_vault
+display_name: 文件仓
+desc: 群聊/私聊文件自动入库，带版本历史、模型读写与改后发回，面板里可直接管理
+help: >-
+  自动收下群聊与私聊里的文档类文件（Word / Excel / PPT / PDF / 文本 / Markdown / 代码 / CSV / 视频），
+  按会话归档、保留版本历史；模型可以列文件、读内容、改写、生成新文件并直接发回聊天；
+  面板里点开即可浏览、预览、在线编辑文本、回滚版本、下载、发送、删除；按保留天数自动清理。
+  限制：直发文件依赖平台能力，QQ 需 NapCat 且会话已绑定；其他平台走框架 File 组件，
+  平台不支持直发时自动降级为文件仓下载链接。视频只在明确询问时抽帧理解，不做常驻监听。
+version: 1.0.0
+short_desc: 聊天文件归档 + 版本历史 + 模型读写
+author: 沐倾
+repo: https://github.com/anhui/astrbot_plugin_file_vault
+astrbot_version: ">=4.16,<5"
+support_platforms:
+  - aiocqhttp
+  - telegram
+  - discord
+  - slack
+  - lark
+  - dingtalk
+  - wecom
+  - qq_official
+  - webchat
+views:
+  - file_vault

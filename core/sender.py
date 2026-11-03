@@ -1,0 +1,31 @@
+"""把文件发回当前会话。三层：平台直发 → File 组件 → 只回提示。"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+try:
+    from astrbot.api.event import MessageChain
+    from astrbot.api.message_components import File as FileComp
+except ImportError:  # 单测环境没有框架
+    MessageChain = None  # type: ignore[assignment]
+    FileComp = None  # type: ignore[assignment]
+
+
+async def send_file(event, path: Path, name: str | None = None) -> str:
+    """返回一句话说明结果，交给模型转述。"""
+    if not path.exists():
+        return f"发送失败：本地文件不存在（{path.name}）"
+    if MessageChain is None or FileComp is None:
+        return f"发送失败：框架组件不可用，文件在 {path}"
+
+    try:
+        chain = MessageChain(chain=[FileComp(name=name or path.name, file=str(path))])
+        await event.send(chain)
+        return f"已发送文件：{name or path.name}"
+    except Exception as exc:
+        # ponytail: 平台不发文件就只回提示；要真·跨平台直发再按平台写适配
+        return (
+            f"当前平台直发文件失败（{type(exc).__name__}: {exc}），"
+            f"文件已在文件仓：{name or path.name}"
+        )

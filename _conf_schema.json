@@ -1,0 +1,84 @@
+{
+  "retention_days": {
+    "type": "int",
+    "description": "保留天数",
+    "default": 90,
+    "hint": "文件入库后超过这个天数自动删除，0 表示永久保留"
+  },
+  "max_versions": {
+    "type": "int",
+    "description": "单文件版本上限",
+    "default": 20,
+    "hint": "超出后自动淘汰最旧的版本，最新版始终保留"
+  },
+  "max_file_mb": {
+    "type": "int",
+    "description": "文档类单文件上限 (MB)",
+    "default": 200,
+    "hint": "超过即不入库，只在聊天里提示"
+  },
+  "max_video_mb": {
+    "type": "int",
+    "description": "视频单文件上限 (MB)",
+    "default": 2048,
+    "hint": "视频体积大，单独设限"
+  },
+  "video_frames": {
+    "type": "int",
+    "description": "视频抽帧张数",
+    "default": 8,
+    "hint": "询问视频内容时抽取的帧数，越多越慢越贵"
+  },
+  "auto_cleanup": {
+    "type": "bool",
+    "description": "启用到期自动清理",
+    "default": true
+  },
+  "storage_root": {
+    "type": "string",
+    "description": "存储根目录",
+    "default": "",
+    "hint": "留空 = 插件数据目录（随面板备份）；填绝对路径则独立存放"
+  },
+  "text_model_provider_id": {
+    "type": "string",
+    "description": "文本模型",
+    "default": "",
+    "hint": "留空 = 跟随框架当前模型"
+  },
+  "vision_model_provider_id": {
+    "type": "string",
+    "description": "视觉模型",
+    "default": "",
+    "hint": "留空 = 跟随框架当前模型；用于 PDF 内嵌图、Office 插图、视频抽帧"
+  },
+  "max_vision_images": {
+    "type": "int",
+    "description": "单次识图张数上限",
+    "default": 6,
+    "hint": "含图文件一次最多送几张图给视觉模型"
+  },
+  "enable_pdf_ocr": {
+    "type": "bool",
+    "description": "PDF 文字层为空时按图识别",
+    "default": true,
+    "hint": "扫描件靠视觉模型读，纯文字 PDF 不受影响"
+  },
+  "video_link_enabled": {
+    "type": "bool",
+    "description": "允许解析视频链接",
+    "default": true,
+    "hint": "用户问「这视频讲了什么」时才下载解析，默认解析完即删"
+  },
+  "video_link_auto_delete": {
+    "type": "bool",
+    "description": "解析完删除临时视频",
+    "default": true
+  },
+  "video_link_cookies": {
+    "type": "string",
+    "description": "视频站点 cookies",
+    "default": "",
+    "hint": "抖音等需要登录的站点，填 Netscape 格式 cookies 文本"
+  }
+}
