@@ -93,6 +93,17 @@ AstrBot 插件：自动归档聊天中的文件，并向模型提供文件读取
 | `video_link_enabled` | bool | `false` | 是否允许解析视频链接；默认关闭，需要时打开 |
 | `video_link_cookies` | string | 空 | 需要登录态平台的 cookies（文本或文件路径） |
 
+## 提示词占位符
+
+三段提示词支持占位符，运行时会替换成实际值；写了不认识的花括号会原样保留。
+
+| 配置项 | 可用占位符 |
+| --- | --- |
+| ideo_prompt | {title} 文件名、{seconds} 视频时长（秒）、{frames} 实际抽帧数、{audio} 原声「有/无」 |
+| ision_prompt | {count} 本次送模型看几张图 |
+| summary_prompt | {chars} 待压缩正文的字符数 |
+
+例：这部视频叫《{title}》，时长 {seconds} 秒，我抽了 {frames} 帧，原声：{audio}。说说画面里发生了什么。
 ## 使用方式
 
 ### 通过聊天
