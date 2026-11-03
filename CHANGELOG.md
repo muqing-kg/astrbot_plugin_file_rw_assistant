@@ -1,5 +1,9 @@
 # 更新日志
 
+## v1.4.6
+
+- 面板页改走 AstrBotPluginView 桥：面板把插件页放在无 allow-same-origin 的 sandbox iframe 里，localStorage 与 Cookie 都不可用，必须由父窗口代发请求
+
 ## v1.4.5
 
 - 列表加载失败时把错误直接显示在表格区，不再只留空白；localStorage 被沙箱挡住时不抛异常

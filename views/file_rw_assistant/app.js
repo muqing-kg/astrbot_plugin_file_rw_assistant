@@ -4,21 +4,45 @@ const state = { kind: '', q: '', items: [], counts: {}, labels: {}, current: nul
 
 const $ = (id) => document.getElementById(id);
 
-function headers() {
-  let token = '';
-  // ponytail: 页面若被塞进 sandbox iframe，localStorage 会抛 SecurityError
-  try { token = localStorage.getItem('token') || ''; } catch (e) { token = ''; }
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+// 面板把插件页放进 sandbox iframe（无 allow-same-origin），localStorage 与 Cookie
+// 都取不到，只能走面板注入的 AstrBotPluginView 桥（postMessage 转发到父窗口带凭证请求）。
+const VIEW = window.AstrBotPluginView;
 
 async function api(path, opt = {}) {
+  const [p, qs] = path.split('?');
+  const endpoint = API + p;
+  if (VIEW) {
+    if ((opt.method || 'GET').toUpperCase() === 'POST') {
+      return VIEW.apiPost(endpoint, JSON.parse(opt.body || '{}'));
+    }
+    return VIEW.apiGet(endpoint, Object.fromEntries(new URLSearchParams(qs || '')));
+  }
+  // 直接打开页面（不在面板 iframe 里）时的兜底
+  let token = '';
+  try { token = localStorage.getItem('token') || ''; } catch (e) { token = ''; }
   const res = await fetch(API + path, {
     ...opt,
-    credentials: 'same-origin',
-    headers: { ...headers(), ...(opt.body ? { 'Content-Type': 'application/json' } : {}), ...(opt.headers || {}) },
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opt.body ? { 'Content-Type': 'application/json' } : {}) },
   });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return res.json();
+}
+
+async function downloadBlob(path) {
+  if (VIEW) {
+    await VIEW.download(API + path, {}, state.current ? state.current.name : 'download');
+    return;
+  }
+  let token = '';
+  try { token = localStorage.getItem('token') || ''; } catch (e) { token = ''; }
+  const res = await fetch(API + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = state.current ? state.current.name : 'download';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function toast(text) {
@@ -219,17 +243,14 @@ $('d-close').onclick = () => { $('drawer').hidden = true; };
 $('d-save').onclick = saveContent;
 $('d-send').onclick = sendToSession;
 $('d-delete').onclick = removeFile;
-// 下载要走 fetch 才能带上面板 token，裸链接会被鉴权挡成 401
+// 下载走桥（父窗口带凭证取文件），直接打开页面时才用 fetch+blob
 $('d-download').onclick = async () => {
   if (!state.current) return;
-  const res = await fetch(`${API}/keyfile/${encodeURIComponent(state.current.id)}`, { headers: headers(), credentials: 'same-origin' });
-  if (!res.ok) { toast(`下载失败：${res.status}`); return; }
-  const url = URL.createObjectURL(await res.blob());
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = state.current.name;
-  a.click();
-  URL.revokeObjectURL(url);
+  try {
+    await downloadBlob(`/keyfile/${encodeURIComponent(state.current.id)}`);
+  } catch (err) {
+    toast(`下载失败：${err.message}`);
+  }
 };
 
 // 分片上传：8MB 一片，最后一片带 last=true 才入库
