@@ -28,7 +28,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.1.1", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.2.0", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -39,13 +39,9 @@ class FileAssistant(Star):
 
     # ── 生命周期 ─────────────────────────────────────────────
     def _root(self) -> Path:
-        custom = str(self.config.get("storage_root") or "").strip()
-        if custom:
-            base = Path(custom)
-        else:
-            from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+        from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
-            base = Path(get_astrbot_plugin_data_path()) / PLUGIN_NAME
+        base = Path(get_astrbot_plugin_data_path()) / PLUGIN_NAME
         base.mkdir(parents=True, exist_ok=True)
         return base
 
@@ -145,31 +141,58 @@ class FileAssistant(Star):
 
     # ── 工具：列 / 读 / 写 / 发 / PDF / 视频链接 ─────────────
     @filter.llm_tool(name="file_list")
-    async def file_list(self, event: AstrMessageEvent, kind: str = "", keyword: str = ""):
-        """列出文件读写小助手里的文件。用户问「有哪些文件」时调用。
+    async def file_list(
+        self,
+        event: AstrMessageEvent,
+        kind: str = "",
+        keyword: str = "",
+        sender: str = "",
+        days: int = 0,
+    ):
+        """列出文件读写小助手里的文件。用户问「有哪些文件」「前几天发的那个」时调用。
 
         Args:
             kind(string): 类型，可选 word/excel/ppt/pdf/text/markdown/code/csv/video，留空表示全部
             keyword(string): 文件名或备注关键词
+            sender(string): 发送人昵称，留空不限
+            days(number): 只看最近几天更新过的，0 表示不限
         """
         kind = (kind or "").strip().lower()
-        items = self.store.search(kind=kind or None, query=keyword or "")
+        items = self.store.search(
+            kind=kind or None,
+            query=keyword or "",
+            sender=sender or "",
+            session=event.unified_msg_origin if not (sender or keyword) else "",
+            days=int(days or 0),
+        )
         if not items:
             return "文件读写小助手里没有符合条件的文件。"
         lines = [
             f"{i['name']} | id={i['id']} | {KIND_LABELS.get(i['kind'], i['kind'])} | "
-            f"{human_size(i['size'])} | v{i['current_version']} | {i['updated_at']}"
+            f"{human_size(i['size'])} | v{i['current_version']} | {i['updated_at']} | "
+            f"{i['sender'] or '未知'}"
             for i in items[:40]
         ]
         return "文件读写小助手（最多显示 40 条）：\n" + "\n".join(lines)
 
     @filter.llm_tool(name="file_read")
-    async def file_read(self, event: AstrMessageEvent, file_id: str, version: int = 0):
-        """读取文件内容。用户问某个文件里写了什么、要你总结或查找内容时调用。
+    async def file_read(
+        self,
+        event: AstrMessageEvent,
+        file_id: str,
+        version: int = 0,
+        pages: str = "",
+        lines: str = "",
+        find: str = "",
+    ):
+        """读取文件内容。用户问某个文件里写了什么、要总结、或要查某处内容时调用。
 
         Args:
             file_id(string): 文件 id，或文件名关键词
             version(number): 指定版本号，0 表示最新版
+            pages(string): PDF 只看这些页，如 "30" 或 "30-32"
+            lines(string): 文本类只看这些行，如 "100-200"
+            find(string): 关键词，只回命中的行（找长文档里的某段内容时用它，别整篇读）
         """
         rec = self._resolve(file_id)
         if not rec:
@@ -183,12 +206,15 @@ class FileAssistant(Star):
             path,
             ocr=bool(self.config.get("enable_pdf_ocr", True)),
             vision=self.vision,
+            pages=pages or "",
+            lines=lines or "",
+            find=find or "",
         )
         return f"《{rec['name']}》第 {version or rec['current_version']} 版内容：\n{text}"
 
     @filter.llm_tool(name="file_write")
     async def file_write(self, event: AstrMessageEvent, file_id: str, content: str = "", ops: str = ""):
-        """改写已有文件并存成新版本。文本类用 content 全量替换；Excel/PPT/Word 用 ops 就地改。
+        """改写已有文件并存成新版本。文本类用 content 全量替换；Excel/PPT/Word 用 ops 就地改，版式不动。
 
         Args:
             file_id(string): 文件 id 或文件名关键词
@@ -202,7 +228,7 @@ class FileAssistant(Star):
         if rec["kind"] == "video":
             return "视频不支持改写。"
         if rec["kind"] == "pdf":
-            return "PDF 用 file_pdf 处理：keep 只留指定页，rebuild 按全文重排新版本。"
+            return "PDF 用 file_pdf：keep 只留指定页，pages 按页渲染看版式。改正文请用 file_new 重写一份。"
         try:
             if writers.is_textual(path) and content:
                 new = self.store.add_version(rec["id"], data=content.encode("utf-8"), note="模型改写")
@@ -213,30 +239,59 @@ class FileAssistant(Star):
                 parsed = _json.loads(ops) if isinstance(ops, str) else ops
                 result = writers.edit_office(path, parsed)
                 new = self.store.add_version(rec["id"], data=path.read_bytes(), note="模型就地改写")
-                return f"{result}；已存成第 {new['current_version']} 版"
+                echo = await readers.read(Path(new["path"]), limit=300)
+                return f"{result}；已存成第 {new['current_version']} 版。回读确认：{echo[:300]}"
             return "没有给内容或 ops，什么都没改。"
         except Exception as exc:
             return f"改写失败（{type(exc).__name__}: {exc}）"
 
     @filter.llm_tool(name="file_new")
-    async def file_new(self, event: AstrMessageEvent, name: str, content: str):
-        """生成一个新文件并存进文件读写小助手。用户要你写代码、写文档、生成报告时调用。
+    async def file_new(
+        self,
+        event: AstrMessageEvent,
+        name: str,
+        content: str = "",
+        from_id: str = "",
+    ):
+        """新建文件。用户要你写文档/整理清单时用 content；要「照这份改一份」时用 from_id 复制原文件再改。
 
         Args:
-            name(string): 文件名，必须带扩展名，如 周报.md、script.py、data.csv
-            content(string): 文件完整内容
+            name(string): 文件名，必须带扩展名，如 周报.docx、数据.xlsx、汇报.pptx、清单.md
+            content(string): 文件内容。xlsx 传 {"sheets":[{"name":"Sheet1","rows":[["列1","列2"],[1,2]]}]}；pptx 传 {"slides":[{"title":"页标题","bullets":["第一条"]}]}；docx 传 {"title":"标题","paragraphs":["第一段"]}；文本类直接传正文
+            from_id(string): 复制哪个已有文件（id 或名字），留空表示不复制
         """
         try:
+            if from_id:
+                src = self._resolve(from_id)
+                if not src:
+                    return f"没找到要复制的文件：{from_id}"
+                rec = self.store.duplicate(
+                    src["id"],
+                    name=name or src["name"],
+                    session=event.unified_msg_origin,
+                    note=f"复制自 {src['name']} v{src['current_version']}",
+                )
+                return (
+                    f"已复制成新文件 {rec['name']}（id={rec['id']}，"
+                    f"第 {rec['current_version']} 版）；接着用 file_write 改它，版式与格式保持原样"
+                )
+            suffix = Path(name).suffix.lower()
+            if suffix in (".xlsx", ".pptx", ".docx"):
+                data = writers.build_office(name, content or "")
+            elif suffix in (".doc", ".xls", ".ppt"):
+                return "旧版 Office 格式存不进去，请用 .docx/.xlsx/.pptx。"
+            else:
+                data = (content or "").encode("utf-8")
             rec = self.store.add(
                 name=name,
                 session=event.unified_msg_origin,
-                data=content.encode("utf-8"),
+                data=data,
                 sender=event.get_sender_name() or "",
                 note="模型生成",
             )
             return f"已生成 {rec['name']}（id={rec['id']}，{human_size(rec['size'])}）"
         except Exception as exc:
-            return f"生成失败：{exc}"
+            return f"生成失败（{type(exc).__name__}: {exc}）"
 
     @filter.llm_tool(name="file_send")
     async def file_send(self, event: AstrMessageEvent, file_id: str, version: int = 0):
@@ -263,15 +318,13 @@ class FileAssistant(Star):
         file_id: str,
         action: str = "pages",
         pages: str = "",
-        content: str = "",
     ):
-        """处理 PDF。keep=只保留指定页并存成新版本；pages=把页渲染成图看版式与扫描件；rebuild=按全文重排新版本（版式会变）。
+        """处理 PDF。keep=只保留指定页并存成新版本；pages=把页渲染成图，用来看版式或读扫描件。
 
         Args:
             file_id(string): 文件 id 或文件名关键词
-            action(string): keep / pages / rebuild
+            action(string): keep / pages
             pages(string): keep 用，如 "1-3,5"
-            content(string): rebuild 用的全文，留空则沿用当前 PDF 已提取的文字
         """
         rec = self._resolve(file_id)
         if not rec or rec["kind"] != "pdf":
@@ -288,13 +341,6 @@ class FileAssistant(Star):
                 new = self.store.add_version(rec["id"], data=out.read_bytes(), note="保留指定页")
                 out.unlink(missing_ok=True)
                 return f"{msg}；已存成第 {new['current_version']} 版"
-            if action == "rebuild":
-                text = content or await readers.read(path, ocr=False, limit=200000)
-                out = self.store.temp_dir / f"{rec['id']}_rebuild.pdf"
-                msg = writers.pdf_from_text(out, text, Path(rec["name"]).stem)
-                new = self.store.add_version(rec["id"], data=out.read_bytes(), note="全文重排")
-                out.unlink(missing_ok=True)
-                return f"{msg}；版式已变化，已存成第 {new['current_version']} 版"
             shots = readers.pdf_page_images(path, 6)
             if not shots:
                 return "按页渲染失败（缺 pypdfium2 或 PDF 损坏）。"
@@ -311,7 +357,7 @@ class FileAssistant(Star):
             url(string): 视频链接
             keep(bool): true 表示顺便存进文件读写小助手，false 表示看完就删
         """
-        if not self.config.get("video_link_enabled", True):
+        if not self.config.get("video_link_enabled", False):
             return "视频链接解析已关闭。"
         if not url.lower().startswith(("http://", "https://")):
             return "这不是一个链接。"
@@ -347,7 +393,7 @@ class FileAssistant(Star):
         frames = video_frames(path, self.store.temp_dir / "frames" / path.stem, count)
         if not frames:
             return "视频抽帧失败（ffmpeg 不可用或文件损坏）。"
-        shots = frames[: int(self.config.get("max_vision_images") or 6)]
+        shots = frames[:6]
         desc = await self.vision.describe(shots)
         return f"《{title}》按帧看内容（抽 {len(frames)} 帧，取 {len(shots)} 帧）：\n{desc}"
 
@@ -380,7 +426,6 @@ class FileAssistant(Star):
             ("/rollback", self._api_rollback, ["POST"]),
             ("/send", self._api_send, ["POST"]),
             ("/upload", self._api_upload, ["POST"]),
-            ("/config", self._api_config, ["GET", "POST"]),
         ]
         for route, handler, methods in routes:
             try:
@@ -486,19 +531,6 @@ class FileAssistant(Star):
             raw = _b64.b64decode(str(body.get("content_b64") or ""))
             rec = self.store.add(name=name, session=session, data=raw, note="面板上传")
         return json_response({"ok": True, "file": rec})
-
-    async def _api_config(self, **_):
-        if web_request.method.upper() == "POST":
-            body = await web_request.json(default={}) or {}
-            for key, value in body.items():
-                if key in self.config:
-                    self.config[key] = value
-            self.config.save_config()
-            if hasattr(self, "_store"):
-                self._store.retention_days = int(self.config.get("retention_days") or 90)
-                self._store.max_versions = int(self.config.get("max_versions") or 20)
-            return json_response({"ok": True, "config": dict(self.config)})
-        return json_response({"config": dict(self.config), "labels": KIND_LABELS})
 
 
 def _parse_pages(text: str) -> list[int]:

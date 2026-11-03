@@ -82,16 +82,60 @@ def _pptx(path: Path) -> str:
     return "\n".join(out)
 
 
-def _pdf(path: Path) -> str:
+def _parse_range(text: str, total: int) -> tuple[int, int]:
+    """把 "30" / "30-32" 解析成 1 起的闭区间，越界自动夹紧。"""
+    text = (text or "").replace("，", "-").replace("~", "-").strip()
+    lo, _, hi = text.partition("-")
+    try:
+        start = int(lo) if lo.strip() else 1
+        end = int(hi) if hi.strip() else (start if "-" not in text else total)
+    except ValueError:
+        return 1, total
+    start = max(1, min(start, total or 1))
+    end = max(start, min(end, total or start))
+    return start, end
+
+
+def _pdf(path: Path, pages: str = "") -> str:
     from pypdf import PdfReader
 
     reader = PdfReader(str(path))
-    out = [f"[PDF 共 {len(reader.pages)} 页]"]
-    for idx, page in enumerate(reader.pages[:60], 1):
-        text = (page.extract_text() or "").strip()
+    total = len(reader.pages)
+    if pages:
+        start, end = _parse_range(pages, total)
+        wanted = range(start, end + 1)
+        out = [f"[PDF 共 {total} 页，本次看第 {start}-{end} 页]"]
+    else:
+        wanted = range(1, min(total, 60) + 1)
+        out = [f"[PDF 共 {total} 页]"]
+    for idx in wanted:
+        text = (reader.pages[idx - 1].extract_text() or "").strip()
         if text:
             out.append(f"[第{idx}页]\n{text}")
     return "\n".join(out)
+
+
+def _find(text: str, keyword: str, limit: int = 40) -> str:
+    """按行找关键词，只回命中行（带行号），省上下文。"""
+    key = keyword.strip().lower()
+    hits = [
+        f"{i}: {line.strip()}"
+        for i, line in enumerate(text.splitlines(), 1)
+        if key in line.lower()
+    ]
+    if not hits:
+        return f"没找到「{keyword}」。"
+    head = "\n".join(hits[:limit])
+    if len(hits) > limit:
+        head += f"\n…共 {len(hits)} 行命中，已显示前 {limit} 行"
+    return head
+
+
+def _lines(text: str, spec: str) -> str:
+    rows = text.splitlines()
+    start, end = _parse_range(spec, len(rows))
+    body = "\n".join(rows[start - 1:end])
+    return f"[第 {start}-{end} 行，共 {len(rows)} 行]\n{body}"
 
 
 def pdf_page_images(path: Path, limit: int = 6, dpi: int = 140) -> list[bytes]:
@@ -147,33 +191,53 @@ def embedded_images(path: Path, limit: int) -> list[bytes]:
 
 
 async def read(
-    path: Path, *, ocr: bool = False, vision=None, limit: int = MAX_CHARS
+    path: Path,
+    *,
+    ocr: bool = False,
+    vision=None,
+    limit: int = MAX_CHARS,
+    pages: str = "",
+    lines: str = "",
+    find: str = "",
 ) -> str:
-    """返回文本摘要。ocr=True 且 PDF 没有文字层时，整页渲染交给视觉模型。"""
+    """返回文本摘要。
+
+    pages 只对 PDF 生效（"30" / "30-32"）；lines 按行区间取（"100-200"）；
+    find 只回关键词命中的行。三者都需要先拿到全文，所以会临时放宽截断。
+    ocr=True 且 PDF 没有文字层时，整页渲染交给视觉模型。
+    """
     suffix = path.suffix.lower()
+    slicing = bool(lines or find)
+    cap = 200_000 if slicing else limit
     try:
         if suffix in (".csv", ".tsv"):
-            return _clip(_csv(path), limit)
-        if suffix in (".txt", ".log", ".md", ".markdown", ".py", ".js", ".ts",
-                      ".json", ".yaml", ".yml", ".sh", ".sql", ".html", ".css",
-                      ".toml", ".ini"):
-            return _clip(_text(path), limit)
-        if suffix == ".docx":
-            return _clip(_docx(path), limit)
-        if suffix == ".xlsx":
-            return _clip(_xlsx(path), limit)
-        if suffix == ".pptx":
-            return _clip(_pptx(path), limit)
-        if suffix == ".pdf":
-            text = _pdf(path)
+            text = _csv(path)
+        elif suffix in (".txt", ".log", ".md", ".markdown", ".py", ".js", ".ts",
+                        ".json", ".yaml", ".yml", ".sh", ".sql", ".html", ".css",
+                        ".toml", ".ini"):
+            text = _text(path)
+        elif suffix == ".docx":
+            text = _docx(path)
+        elif suffix == ".xlsx":
+            text = _xlsx(path)
+        elif suffix == ".pptx":
+            text = _pptx(path)
+        elif suffix == ".pdf":
+            text = _pdf(path, pages)
             if ocr and len(text) < 50 and vision is not None:
                 shots = pdf_page_images(path, 6)
                 if not shots:
                     return _clip("（PDF 无文字层，服务器缺 pypdfium2，无法按页识图）\n" + text, limit)
                 return _clip("（PDF 无文字层，按页渲染识图）\n" + await vision.describe(shots), limit)
-            return _clip(text, limit)
-        if suffix in (".doc", ".xls", ".ppt"):
+            return _clip(_find(text, find) if find else (_lines(text, lines) if lines else text), limit)
+        elif suffix in (".doc", ".xls", ".ppt"):
             return "旧版 Office 格式（.doc/.xls/.ppt）不支持直接解析，请转成新版格式。"
+        else:
+            return f"不支持的类型：{suffix}"
     except Exception as exc:  # 解析失败要说清楚，不吞
         return f"解析失败（{type(exc).__name__}: {exc}）"
-    return f"不支持的类型：{suffix}"
+    if find:
+        return _find(text, find)
+    if lines:
+        return _lines(text, lines)
+    return _clip(text, cap)

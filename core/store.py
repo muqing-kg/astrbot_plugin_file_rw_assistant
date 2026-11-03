@@ -240,7 +240,33 @@ class FileStore:
                 ).fetchone()
         return dict(row) if row else None
 
-    def search(self, kind: str | None = None, query: str = "", limit: int = 500) -> list[dict]:
+    def duplicate(
+        self, file_id: str, name: str = "", session: str = "", note: str = "复制"
+    ) -> dict[str, Any]:
+        """把某文件的当前版本复制成一个新文件，供「照原格式改一份」用。"""
+        rec = self.get(file_id)
+        if not rec:
+            raise KeyError(file_id)
+        src = Path(rec["path"])
+        if not src.exists():
+            raise FileNotFoundError(src)
+        return self.add(
+            name=name or rec["name"],
+            session=session or rec["session"],
+            src=src,
+            sender=rec.get("sender") or "",
+            note=note,
+        )
+
+    def search(
+        self,
+        kind: str | None = None,
+        query: str = "",
+        limit: int = 500,
+        session: str = "",
+        sender: str = "",
+        days: int = 0,
+    ) -> list[dict]:
         sql = "SELECT * FROM files WHERE 1=1"
         args: list[Any] = []
         if kind:
@@ -249,6 +275,17 @@ class FileStore:
         if query:
             sql += " AND (name LIKE ? OR note LIKE ?)"
             args += [f"%{query}%", f"%{query}%"]
+        if session:
+            sql += " AND session LIKE ?"
+            args.append(f"%{session}%")
+        if sender:
+            sql += " AND sender LIKE ?"
+            args.append(f"%{sender}%")
+        if days and int(days) > 0:
+            sql += " AND updated_at >= ?"
+            args.append(
+                (datetime.now() - timedelta(days=int(days))).strftime("%Y-%m-%d %H:%M:%S")
+            )
         sql += " ORDER BY updated_at DESC LIMIT ?"
         args.append(limit)
         with closing(self._conn()) as conn:

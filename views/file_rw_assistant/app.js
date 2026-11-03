@@ -133,50 +133,12 @@ async function removeFile() {
   await load();
 }
 
-async function renderSettings() {
-  const data = await api('/config');
-  const host = $('settings');
-  host.innerHTML = '';
-  Object.entries(data.config).forEach(([key, value]) => {
-    const wrap = document.createElement('label');
-    wrap.className = 'field';
-    const type = typeof value === 'boolean' ? 'checkbox' : typeof value === 'number' ? 'number' : 'text';
-    wrap.innerHTML = `<span>${key}</span>`;
-    const input = document.createElement('input');
-    input.type = type;
-    input.dataset.key = key;
-    if (type === 'checkbox') input.checked = value; else input.value = value;
-    wrap.appendChild(input);
-    host.appendChild(wrap);
-  });
-}
-
-async function saveSettings() {
-  const body = {};
-  $('settings').querySelectorAll('input').forEach((el) => {
-    const key = el.dataset.key;
-    body[key] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value;
-  });
-  await api('/config', { method: 'POST', body: JSON.stringify(body) });
-  alert('已保存');
-}
-
-document.querySelectorAll('.tab').forEach((tab) => {
-  tab.onclick = () => {
-    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
-    $('view-files').hidden = tab.dataset.tab !== 'files';
-    $('view-settings').hidden = tab.dataset.tab !== 'settings';
-    if (tab.dataset.tab === 'settings') renderSettings();
-  };
-});
-
 $('q').oninput = (e) => { state.q = e.target.value.trim(); clearTimeout(window._t); window._t = setTimeout(load, 250); };
 $('refresh').onclick = load;
 $('d-close').onclick = () => { $('drawer').hidden = true; };
 $('d-save').onclick = saveContent;
 $('d-send').onclick = sendToSession;
 $('d-delete').onclick = removeFile;
-$('s-save').onclick = saveSettings;
 
 // 分片上传：8MB 一片，最后一片带 last=true 才入库
 const CHUNK = 8 * 1024 * 1024;

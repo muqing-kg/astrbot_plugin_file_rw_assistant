@@ -1,5 +1,17 @@
 # 更新日志
 
+## v1.2.0
+
+- 新增 Word/Excel/PPT 生成：`file_new` 传对应 JSON 结构直接生成文档，不再只能写文本类文件
+- 新增「复制现有文件另存一份再改」：`file_new` 的 `from_id` 参数，复制后母版、列宽、公式、样式原样保留
+- `file_read` 支持 PDF 页码（`pages`）、文本行区间（`lines`）、关键词定位（`find`），长文档不必整篇读
+- `file_write` 改写后回读确认，把改出来的开头一并返回
+- `file_list` 增加发送人、会话与最近天数筛选，几天后仍能找回文件
+- 移除 PDF `rebuild`（按正文重排会丢版式）；PDF 只保留 `keep` 保留页与 `pages` 按页识图
+- 移除面板「设置」标签页（与插件配置页读写同一份配置，纯重复入口）
+- 移除 `storage_root`、`max_vision_images` 两个配置项；移除 `reportlab` 依赖
+- 视频链接解析改为默认关闭（`video_link_enabled` 默认 `false`）
+
 ## v1.1.1
 
 - 更名：文枢 → 文件读写小助手（插件 ID `astrbot_plugin_file_rw_assistant`，仓库同步改名；旧版 ID 不通用，需重装）

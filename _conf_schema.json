@@ -34,12 +34,6 @@
     "description": "启用到期自动清理",
     "default": true
   },
-  "storage_root": {
-    "type": "string",
-    "description": "存储根目录",
-    "default": "",
-    "hint": "留空 = 插件数据目录（随面板备份）；填绝对路径则独立存放"
-  },
   "text_model_provider_id": {
     "type": "string",
     "description": "文本模型",
@@ -52,12 +46,6 @@
     "default": "",
     "hint": "留空 = 跟随框架当前模型；用于 PDF 内嵌图、Office 插图、视频抽帧"
   },
-  "max_vision_images": {
-    "type": "int",
-    "description": "单次识图张数上限",
-    "default": 6,
-    "hint": "含图文件一次最多送几张图给视觉模型"
-  },
   "enable_pdf_ocr": {
     "type": "bool",
     "description": "PDF 文字层为空时按图识别",
@@ -67,8 +55,8 @@
   "video_link_enabled": {
     "type": "bool",
     "description": "允许解析视频链接",
-    "default": true,
-    "hint": "用户问「这视频讲了什么」时才下载解析，默认解析完即删"
+    "default": false,
+    "hint": "默认关闭：yt-dlp 对部分站点要 cookies，且平台改接口就会失败。需要时再打开"
   },
   "video_link_auto_delete": {
     "type": "bool",
