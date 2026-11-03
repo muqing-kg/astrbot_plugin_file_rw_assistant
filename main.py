@@ -17,7 +17,14 @@ from astrbot.api.web import request as web_request
 from .core import links, readers, writers
 from .core.sender import send_file
 from .core.store import KINDS, FileStore, human_size, kind_of
-from .core.vlm import Vision, duration_of, extract_audio, frames_for, subtitle_text
+from .core.vlm import (
+    Vision,
+    duration_of,
+    extract_audio,
+    fill,
+    frames_for,
+    subtitle_text,
+)
 
 PLUGIN_NAME = "astrbot_plugin_file_rw_assistant"
 REPO = "https://github.com/muqing-kg/astrbot_plugin_file_rw_assistant"
@@ -29,7 +36,7 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.3.1", REPO)
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.3.2", REPO)
 class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -110,7 +117,9 @@ class FileAssistant(Star):
         if provider is None:
             return text
         try:
-            instruction = str(self.cfg.get("summary_prompt") or "").strip() or (
+            instruction = fill(
+                str(self.cfg.get("summary_prompt") or "").strip(), chars=len(text)
+            ) or (
                 "把下面的文档正文压缩成不超过 800 字的要点，数字、名称、结论必须保留。"
             )
             brief = await provider.text_chat(
@@ -445,9 +454,14 @@ class FileAssistant(Star):
             )
         if not frames and not audio:
             return "视频抽帧失败（ffmpeg 不可用或文件损坏）。"
-        desc = await self.vision.describe(
-            frames, prompt=str(self.cfg.get("video_prompt") or ""), audio=audio
+        prompt = fill(
+            str(self.cfg.get("video_prompt") or ""),
+            title=title,
+            seconds=f"{seconds:.0f}",
+            frames=len(frames),
+            audio="有" if audio else "无",
         )
+        desc = await self.vision.describe(frames, prompt=prompt, audio=audio)
         heard = "＋原声" if audio else ""
         body = f"《{title}》按 {len(frames)} 帧{heard}看内容（时长 {seconds:.0f} 秒）：\n{desc}"
         subs = subtitle_text(path)
@@ -483,13 +497,16 @@ class FileAssistant(Star):
             ("/send", self._api_send, ["POST"]),
             ("/upload", self._api_upload, ["POST"]),
         ]
-        for route, handler, methods in routes:
-            try:
-                self.context.register_web_api(
-                    f"/{PLUGIN_NAME}{route}", handler, methods, f"文件读写小助手 {route}"
-                )
-            except Exception as exc:
-                logger.warning(f"[文件读写小助手] 注册接口 {route} 失败：{exc}")
+        # 浏览器里缓存的旧页面仍在用旧插件名调接口，旧名一并注册，别让列表白白空着
+        prefixes = [PLUGIN_NAME, "astrbot_plugin_doc_hub", "astrbot_plugin_file_vault"]
+        for prefix in prefixes:
+            for route, handler, methods in routes:
+                try:
+                    self.context.register_web_api(
+                        f"/{prefix}{route}", handler, methods, f"文件读写小助手 {route}"
+                    )
+                except Exception as exc:
+                    logger.warning(f"[文件读写小助手] 注册接口 {prefix}{route} 失败：{exc}")
 
     async def _api_list(self, **_: Any):
         kind = (web_request.query.get("kind") or "").strip()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import math
+import re
 import os
 import subprocess
 import tempfile
@@ -25,6 +26,18 @@ PROMPT = (
     "逐张描述这些图片里能读到的内容。有文字就照抄关键文字与原意，"
     "是表格就还原成文字表格，是界面就说明在讲什么。不要寒暄，不要复述指令。"
 )
+
+
+def fill(template: str, **values: object) -> str:
+    """把模板里的 {name} 换成给定值；不认识的花括号原样留着，别让它报错。"""
+    if not template:
+        return ""
+
+    def sub(m: "re.Match[str]") -> str:
+        key = m.group(1)
+        return str(values[key]) if key in values else m.group(0)
+
+    return re.sub(r"\{(\w+)\}", sub, template)
 
 
 def _data_uri(data: bytes, mime: str = "image/png") -> str:
@@ -57,7 +70,7 @@ class Vision:
         if audio:
             kwargs["audio_urls"] = [audio]
         resp = await provider.text_chat(
-            prompt=(prompt or self.default_prompt or PROMPT),
+            prompt=fill(prompt or self.default_prompt or PROMPT, count=len(images)),
             image_urls=[_data_uri(img) for img in images] or None,
             system_prompt="你是文档识图助手。",
             **kwargs,

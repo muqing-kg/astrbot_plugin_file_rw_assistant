@@ -175,6 +175,12 @@ class StoreTest(unittest.TestCase):
             "send_max_mb", "video_link_enabled", "video_link_cookies",
         }
 
+    def test_fill_keeps_unknown_braces(self):
+        """占位符只换认识的键，别的花括号原样留着，不能抛异常。"""
+        assert vlm.fill("时长{seconds}秒，抽{frames}帧", seconds="16", frames=8) == "时长16秒，抽8帧"
+        assert vlm.fill("JSON {\"a\":1} 与 {nope}", nope="?") == 'JSON {"a":1} 与 ?'
+        assert vlm.fill("", count=1) == ""
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
