@@ -1,4 +1,4 @@
-"""文枢落盘与索引。SQLite 只存元数据，文件本体按会话归档。"""
+"""文件读写小助手落盘与索引。SQLite 只存元数据，文件本体按会话归档。"""
 
 from __future__ import annotations
 

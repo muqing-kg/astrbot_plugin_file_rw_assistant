@@ -1,4 +1,4 @@
-"""文枢：聊天文件归档、版本历史、读写解析、改写生成与面板管理。"""
+"""文件读写小助手：聊天文件归档、版本历史、读写解析、改写生成与面板管理。"""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ from .core.sender import send_file
 from .core.store import KINDS, FileStore, human_size, kind_of
 from .core.vlm import Vision, video_frames
 
-PLUGIN_NAME = "astrbot_plugin_doc_hub"
-REPO = "https://github.com/muqing-kg/astrbot_plugin_doc_hub"
+PLUGIN_NAME = "astrbot_plugin_file_rw_assistant"
+REPO = "https://github.com/muqing-kg/astrbot_plugin_file_rw_assistant"
 KIND_LABELS = {
     "word": "Word", "excel": "Excel", "ppt": "PPT", "pdf": "PDF",
     "text": "文本", "markdown": "Markdown", "code": "代码", "csv": "CSV",
@@ -28,8 +28,8 @@ KIND_LABELS = {
 FILE_KINDS = set(KINDS)
 
 
-@register(PLUGIN_NAME, "沐倾", "文枢", "1.1.0", REPO)
-class DocHub(Star):
+@register(PLUGIN_NAME, "沐倾", "文件读写小助手", "1.1.1", REPO)
+class FileAssistant(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
@@ -63,12 +63,12 @@ class DocHub(Star):
         self.store
         if self.config.get("auto_cleanup", True):
             self._cleaner = asyncio.create_task(self._cleanup_loop())
-        logger.info(f"[文枢] 已就绪，存储于 {self._root()}")
+        logger.info(f"[文件读写小助手] 已就绪，存储于 {self._root()}")
 
     async def terminate(self) -> None:
         if self._cleaner:
             self._cleaner.cancel()
-        logger.info("[文枢] 已卸载")
+        logger.info("[文件读写小助手] 已卸载")
 
     async def _cleanup_loop(self) -> None:
         while True:
@@ -76,11 +76,11 @@ class DocHub(Star):
                 await asyncio.sleep(6 * 3600)
                 result = self.store.purge()
                 if result["expired"] or result["temp"]:
-                    logger.info(f"[文枢] 清理完成：{result}")
+                    logger.info(f"[文件读写小助手] 清理完成：{result}")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.warning(f"[文枢] 清理失败：{exc}")
+                logger.warning(f"[文件读写小助手] 清理失败：{exc}")
 
     # ── 模型选择 ─────────────────────────────────────────────
     async def _provider_by(self, key: str):
@@ -92,7 +92,7 @@ class DocHub(Star):
                     return provider
             return await self.context.get_using_provider_async()
         except Exception as exc:
-            logger.warning(f"[文枢] 取模型失败（{key}）：{exc}")
+            logger.warning(f"[文件读写小助手] 取模型失败（{key}）：{exc}")
             return None
 
     async def _vision_provider(self):
@@ -137,16 +137,16 @@ class DocHub(Star):
             except Exception as exc:
                 notes.append(f"{name}：{exc}")
         if notes:
-            marker = "\n[文枢] " + "；".join(notes)
+            marker = "\n[文件读写小助手] " + "；".join(notes)
             try:
                 event.message_str = (event.message_str or "") + marker
             except Exception:
-                logger.info(f"[文枢] 入库：{'; '.join(notes)}")
+                logger.info(f"[文件读写小助手] 入库：{'; '.join(notes)}")
 
     # ── 工具：列 / 读 / 写 / 发 / PDF / 视频链接 ─────────────
     @filter.llm_tool(name="file_list")
     async def file_list(self, event: AstrMessageEvent, kind: str = "", keyword: str = ""):
-        """列出文枢里的文件。用户问「有哪些文件」时调用。
+        """列出文件读写小助手里的文件。用户问「有哪些文件」时调用。
 
         Args:
             kind(string): 类型，可选 word/excel/ppt/pdf/text/markdown/code/csv/video，留空表示全部
@@ -155,13 +155,13 @@ class DocHub(Star):
         kind = (kind or "").strip().lower()
         items = self.store.search(kind=kind or None, query=keyword or "")
         if not items:
-            return "文枢里没有符合条件的文件。"
+            return "文件读写小助手里没有符合条件的文件。"
         lines = [
             f"{i['name']} | id={i['id']} | {KIND_LABELS.get(i['kind'], i['kind'])} | "
             f"{human_size(i['size'])} | v{i['current_version']} | {i['updated_at']}"
             for i in items[:40]
         ]
-        return "文枢（最多显示 40 条）：\n" + "\n".join(lines)
+        return "文件读写小助手（最多显示 40 条）：\n" + "\n".join(lines)
 
     @filter.llm_tool(name="file_read")
     async def file_read(self, event: AstrMessageEvent, file_id: str, version: int = 0):
@@ -220,7 +220,7 @@ class DocHub(Star):
 
     @filter.llm_tool(name="file_new")
     async def file_new(self, event: AstrMessageEvent, name: str, content: str):
-        """生成一个新文件并存进文枢。用户要你写代码、写文档、生成报告时调用。
+        """生成一个新文件并存进文件读写小助手。用户要你写代码、写文档、生成报告时调用。
 
         Args:
             name(string): 文件名，必须带扩展名，如 周报.md、script.py、data.csv
@@ -240,7 +240,7 @@ class DocHub(Star):
 
     @filter.llm_tool(name="file_send")
     async def file_send(self, event: AstrMessageEvent, file_id: str, version: int = 0):
-        """把文枢里的文件发到当前聊天。用户说「发给我」「传过来」时调用。
+        """把文件读写小助手里的文件发到当前聊天。用户说「发给我」「传过来」时调用。
 
         Args:
             file_id(string): 文件 id 或文件名关键词
@@ -309,7 +309,7 @@ class DocHub(Star):
 
         Args:
             url(string): 视频链接
-            keep(bool): true 表示顺便存进文枢，false 表示看完就删
+            keep(bool): true 表示顺便存进文件读写小助手，false 表示看完就删
         """
         if not self.config.get("video_link_enabled", True):
             return "视频链接解析已关闭。"
@@ -334,7 +334,7 @@ class DocHub(Star):
                 sender=event.get_sender_name() or "",
                 note="视频链接",
             )
-            return f"{desc}\n已存进文枢：{rec['name']}（id={rec['id']}）"
+            return f"{desc}\n已存进文件读写小助手：{rec['name']}（id={rec['id']}）"
         finally:
             if keep and self.config.get("video_link_auto_delete", True):
                 path.unlink(missing_ok=True)
@@ -385,10 +385,10 @@ class DocHub(Star):
         for route, handler, methods in routes:
             try:
                 self.context.register_web_api(
-                    f"/{PLUGIN_NAME}{route}", handler, methods, f"文枢 {route}"
+                    f"/{PLUGIN_NAME}{route}", handler, methods, f"文件读写小助手 {route}"
                 )
             except Exception as exc:
-                logger.warning(f"[文枢] 注册接口 {route} 失败：{exc}")
+                logger.warning(f"[文件读写小助手] 注册接口 {route} 失败：{exc}")
 
     async def _api_list(self, **_: Any):
         kind = (web_request.query.get("kind") or "").strip()

@@ -1,8 +1,8 @@
-name: astrbot_plugin_doc_hub
-display_name: 文枢
+name: astrbot_plugin_file_rw_assistant
+display_name: 文件读写小助手
 desc: 聊天文件自动归档，可读可改可生成可发回，带版本历史与面板管理
 help: >-
-  文枢 = 文档中枢。自动收下群聊与私聊里的文档类文件（Word / Excel / PPT / PDF / 文本 / Markdown / 代码 / CSV / 视频），
+  文件读写小助手：文件的收、读、改、发都在这里闭环。自动收下群聊与私聊里的文档类文件（Word / Excel / PPT / PDF / 文本 / Markdown / 代码 / CSV / 视频），
   按会话归档并保留版本历史；模型能列文件、读内容（含扫描件按页识图）、就地改写 Office、重排 PDF、
   生成新文件、看图说视频、解析视频链接，并把结果发回聊天；
   面板里点开即用：类型分栏、预览、在线改文本、版本回滚、下载、发送、删除、分片上传大文件、改配置；按保留天数自动清理。
@@ -10,10 +10,10 @@ help: >-
   Office 只能就地改文字与单元格，不支持在线编辑版式；PDF 正文重排会丢原版式；
   视频链接解析需服务器装 yt-dlp，部分平台（如抖音）需自行配置 cookies 文件；
   压缩包、图片、音频不入库。
-version: 1.1.0
-short_desc: 文档中枢：归档 + 读写 + 改写 + 发回
+version: 1.1.1
+short_desc: 文件读写小助手：归档 + 读写 + 改写 + 发回
 author: 沐倾
-repo: https://github.com/muqing-kg/astrbot_plugin_doc_hub
+repo: https://github.com/muqing-kg/astrbot_plugin_file_rw_assistant
 astrbot_version: ">=4.16,<5"
 support_platforms:
   - aiocqhttp
@@ -26,4 +26,4 @@ support_platforms:
   - qq_official
   - webchat
 views:
-  - doc_hub
+  - file_rw_assistant

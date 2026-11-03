@@ -1,4 +1,4 @@
-const API = '/api/plug/astrbot_plugin_doc_hub';
+const API = '/api/plug/astrbot_plugin_file_rw_assistant';
 const KIND_ORDER = ['word', 'excel', 'ppt', 'pdf', 'text', 'markdown', 'code', 'csv', 'video'];
 const state = { kind: '', q: '', items: [], counts: {}, labels: {}, current: null };
 
