@@ -111,8 +111,9 @@ def _scene_frames(path: Path, out_dir: Path, count: int) -> tuple[list[Path], li
     for old in out_dir.glob("*.jpg"):
         old.unlink(missing_ok=True)
     pattern = out_dir / "s_%03d.jpg"
+    # showinfo 打在 info 级；写成 -v error 会把它吞掉，帧时间就静默变空
     cmd = [
-        "ffmpeg", "-v", "error", "-i", str(path),
+        "ffmpeg", "-v", "info", "-i", str(path),
         "-vf", "select='gt(scene,0.3)',showinfo,scale=1024:-2",
         "-vsync", "vfr", "-frames:v", str(count), str(pattern),
     ]
